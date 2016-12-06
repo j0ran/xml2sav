@@ -65,6 +65,13 @@ func stob(s string, l int) []byte {
 	return []byte(s)
 }
 
+func trim(s string, l int) string {
+	if len(s) > l {
+		return s[:l]
+	}
+	return s
+}
+
 func ftoa(f float64) string {
 	return strconv.FormatFloat(f, 'E', -1, 64)
 }
@@ -77,7 +84,7 @@ func (out *SpssWriter) caseSize() int32 {
 	return size
 }
 
-func (out *SpssWriter) headerRecord(fileLabel string) {
+func (out *SpssWriter) headerRecord(fileLabel string, ncases int32) {
 	c := time.Now()
 	out.Write(stob("$FL2", 4))                               // rec_tyoe
 	out.Write(stob("@(#) SPSS DATA FILE - xml2sav 2.0", 60)) // prod_name
@@ -85,7 +92,7 @@ func (out *SpssWriter) headerRecord(fileLabel string) {
 	binary.Write(out, endian, out.caseSize())                // nominal_case_size
 	binary.Write(out, endian, int32(0))                      // compression
 	binary.Write(out, endian, int32(0))                      // weight_index
-	binary.Write(out, endian, int32(-1))                     // ncases
+	binary.Write(out, endian, int32(ncases))                 // ncases
 	binary.Write(out, endian, float64(100))                  // bias
 	out.Write(stob(c.Format("02 Jan 06"), 9))                // creation_date
 	out.Write(stob(c.Format("15:04:05"), 8))                 // creation_time
@@ -99,8 +106,10 @@ func (out *SpssWriter) updateHeaderNCases(flusher Flusher, seeker io.WriteSeeker
 	if flusher != nil {
 		flusher.Flush()
 	}
-	seeker.Seek(80, io.SeekStart)
-	binary.Write(seeker, endian, out.Count) // ncases in headerRecord
+	if seeker != nil {
+		seeker.Seek(80, io.SeekStart)
+		binary.Write(seeker, endian, out.Count) // ncases in headerRecord
+	}
 }
 
 func (out *SpssWriter) variableRecords() {
@@ -120,9 +129,39 @@ func (out *SpssWriter) variableRecords() {
 		if len(v.Label) > 0 {
 			binary.Write(out, endian, int32(len(v.Label))) // label_len
 			out.Write([]byte(v.Label))                     // label
-			for i, pad := 0, len(v.Label)%4; i < pad; i++ {
+			for i, pad := 0, 4-len(v.Label)%4; i < pad; i++ {
 				out.Write([]byte{0}) // pad out until multiple of 32 bit
 			}
+		}
+	}
+}
+
+func (out *SpssWriter) valueLabelRecord(index int32) {
+	v := out.Dict[index]
+	binary.Write(out, endian, int32(3))             // rec_type
+	binary.Write(out, endian, int32(len(v.Labels))) // label_count
+	for _, label := range v.Labels {
+		out.Write(stob(label.Value, 8)) // value
+		l := len(label.Desc)
+		if l > 120 {
+			l = 120
+		}
+		binary.Write(out, endian, int32(l)) // label_len
+		out.Write(stob(label.Desc, l))      // label
+		//for i, pad := 0, 8-l%8; i < pad; i++ {
+		//	out.Write([]byte{32})
+		//}
+	}
+
+	binary.Write(out, endian, int32(4)) // rec_type
+	binary.Write(out, endian, int32(1)) // var_count
+	binary.Write(out, endian, index)    // vars
+}
+
+func (out *SpssWriter) valueLabelRecords() {
+	for i := range out.Dict {
+		if len(out.Dict[i].Labels) > 0 {
+			out.valueLabelRecord(int32(i))
 		}
 	}
 }
@@ -159,7 +198,7 @@ func (out *SpssWriter) terminationRecord() {
 	binary.Write(out, endian, int32(0))   // filler
 }
 
-func (out *SpssWriter) addVar(v *Var) {
+func (out *SpssWriter) AddVar(v *Var) {
 	// Trim long name
 	if len(v.Name) > 64 {
 		v.Name = v.Name[:64]
@@ -194,14 +233,14 @@ func (out *SpssWriter) addVar(v *Var) {
 	out.ShortMap[v.ShortName] = v
 }
 
-func (out *SpssWriter) clearCase() {
+func (out *SpssWriter) ClearCase() {
 	for _, v := range out.Dict {
 		v.Value = ""
 		v.HasValue = false
 	}
 }
 
-func (out *SpssWriter) setVar(name, value string) {
+func (out *SpssWriter) SetVar(name, value string) {
 	v, found := out.DictMap[name]
 	if !found {
 		log.Fatalln("Can not find the variable named", name)
@@ -210,7 +249,7 @@ func (out *SpssWriter) setVar(name, value string) {
 	v.HasValue = true
 }
 
-func (out *SpssWriter) writeCase() {
+func (out *SpssWriter) WriteCase() {
 	for _, v := range out.Dict {
 		if v.HasValue {
 			f, err := strconv.ParseFloat(v.Value, 64)
@@ -231,6 +270,19 @@ func (out *SpssWriter) writeCase() {
 	out.Count++
 }
 
+func (out *SpssWriter) Start(fileLabel string, ncases int32) {
+	out.headerRecord(fileLabel, ncases)
+	out.variableRecords()
+	//out.valueLabelRecords()
+	out.longVarNameRecords()
+	out.encodingRecord()
+	out.terminationRecord()
+}
+
+func (out *SpssWriter) Finish(flusher Flusher, seeker io.WriteSeeker) {
+	out.updateHeaderNCases(flusher, seeker)
+}
+
 func main() {
 	fmt.Println("xml2sav")
 
@@ -243,7 +295,7 @@ func main() {
 	bufout := bufio.NewWriter(file)
 	out := NewSpssWriter(bufout)
 
-	out.addVar(&Var{
+	out.AddVar(&Var{
 		Name:     "eenhelelangevarname1",
 		Type:     0,
 		Print:    5,
@@ -251,7 +303,7 @@ func main() {
 		Decimals: 2,
 		Label:    "Test label",
 	})
-	out.addVar(&Var{
+	out.AddVar(&Var{
 		Name:     "eenhelelangevarname2",
 		Type:     0,
 		Print:    5,
@@ -259,16 +311,22 @@ func main() {
 		Decimals: 2,
 		Label:    "Test label",
 	})
-	out.headerRecord("Export from example.xsav")
-	out.variableRecords()
-	out.longVarNameRecords()
-	out.encodingRecord()
-	out.terminationRecord()
+	out.AddVar(&Var{
+		Name:     "abc",
+		Type:     0,
+		Print:    5,
+		Width:    8,
+		Decimals: 2,
+		Label:    "ab",
+		Labels:   []Label{Label{"0", "Man"}, Label{"1", "Vrouw"}},
+	})
+	out.Start("Export from example.xsav", -1)
 	for i := float64(0.0); i < 10; i += 0.1 {
-		out.clearCase()
-		out.setVar("eenhelelangevarname1", ftoa(i))
-		out.setVar("eenhelelangevarname2", ftoa(i+0.03))
-		out.writeCase()
+		out.ClearCase()
+		out.SetVar("eenhelelangevarname1", ftoa(i))
+		out.SetVar("eenhelelangevarname2", ftoa(i+0.03))
+		out.SetVar("abc", "0")
+		out.WriteCase()
 	}
-	out.updateHeaderNCases(bufout, file)
+	out.Finish(bufout, file)
 }
