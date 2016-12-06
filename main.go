@@ -20,6 +20,7 @@ type Label struct {
 }
 
 type Var struct {
+	Index      int32
 	Name       string
 	ShortName  string
 	Type       int32
@@ -46,6 +47,7 @@ type SpssWriter struct {
 	DictMap  map[string]*Var
 	ShortMap map[string]*Var
 	Count    int32
+	Index    int32
 }
 
 func NewSpssWriter(w io.Writer) *SpssWriter {
@@ -140,8 +142,7 @@ func (out *SpssWriter) variableRecords() {
 	}
 }
 
-func (out *SpssWriter) valueLabelRecord(index int32) {
-	v := out.Dict[index]
+func (out *SpssWriter) valueLabelRecord(v *Var) {
 	binary.Write(out, endian, int32(3))             // rec_type
 	binary.Write(out, endian, int32(len(v.Labels))) // label_count
 	for _, label := range v.Labels {
@@ -163,13 +164,13 @@ func (out *SpssWriter) valueLabelRecord(index int32) {
 
 	binary.Write(out, endian, int32(4)) // rec_type
 	binary.Write(out, endian, int32(1)) // var_count
-	binary.Write(out, endian, index)    // vars
+	binary.Write(out, endian, v.Index)  // vars
 }
 
 func (out *SpssWriter) valueLabelRecords() {
-	for i := range out.Dict {
-		if len(out.Dict[i].Labels) > 0 {
-			out.valueLabelRecord(int32(i))
+	for _, v := range out.Dict {
+		if len(v.Labels) > 0 {
+			out.valueLabelRecord(v)
 		}
 	}
 }
@@ -215,6 +216,9 @@ func (out *SpssWriter) AddVar(v *Var) {
 	if _, found := out.DictMap[v.Name]; found {
 		log.Fatalln("Adding duplicate variable named", v.Name)
 	}
+
+	v.Index = out.Index
+	out.Index++
 
 	// Create unique short variable name
 	short := strings.ToUpper(v.Name)
