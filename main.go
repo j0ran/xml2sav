@@ -56,10 +56,10 @@ func (out *SpssWriter) headerRecord(fileLabel string) {
 	out.Write(stob("$FL2", 4))                               // rec_tyoe
 	out.Write(stob("@(#) SPSS DATA FILE - xml2sav 2.0", 60)) // prod_name
 	binary.Write(out, endian, int32(2))                      // layout_code
-	binary.Write(out, endian, int32(1))                      // nominal_case_size
+	binary.Write(out, endian, int32(2))                      // nominal_case_size
 	binary.Write(out, endian, int32(0))                      // compression
 	binary.Write(out, endian, int32(0))                      // weight_index
-	binary.Write(out, endian, int32(100))                    // ncases
+	binary.Write(out, endian, int32(50))                     // ncases
 	binary.Write(out, endian, float64(100))                  // bias
 	out.Write(stob(c.Format("02 Jan 06"), 9))                // creation_date
 	out.Write(stob(c.Format("15:04:05"), 8))                 // creation_time
@@ -145,6 +145,14 @@ func main() {
 
 	out.addVar(&Var{
 		Name:     "TESTA",
+		Type:     0,
+		Print:    5,
+		Width:    8,
+		Decimals: 2,
+		Label:    "Test label",
+	})
+	out.addVar(&Var{
+		Name:     "TESTB",
 		Type:     0,
 		Print:    5,
 		Width:    8,
