@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -15,9 +16,8 @@ var endian = binary.LittleEndian
 func stob(s string, l int) []byte {
 	if len(s) > l {
 		s = s[:l]
-	}
-	for len(s) < l {
-		s += " "
+	} else if len(s) < l {
+		s += strings.Repeat(" ", l-len(s))
 	}
 	return []byte(s)
 }
