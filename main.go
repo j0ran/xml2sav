@@ -11,7 +11,32 @@ import (
 	"time"
 )
 
+type Label struct {
+	Value string
+	Desc  string
+}
+
+type Var struct {
+	Name     string
+	Type     byte
+	Width    byte
+	Decimals byte
+	Print    int32
+	Write    int32
+	Label    string
+	Default  string
+	Labels   []Label
+	Value    string
+	HasValue bool
+}
+
 var endian = binary.LittleEndian
+
+type SpssWriter struct {
+	io.Writer
+	Dict    []*Var
+	DictMap map[string]*Var
+}
 
 func stob(s string, l int) []byte {
 	if len(s) > l {
@@ -22,7 +47,7 @@ func stob(s string, l int) []byte {
 	return []byte(s)
 }
 
-func headerRecord(out io.Writer, fileLabel string) {
+func (out *SpssWriter) headerRecord(fileLabel string) {
 	c := time.Now()
 	out.Write(stob("$FL2", 4))                               // rec_tyoe
 	out.Write(stob("@(#) SPSS DATA FILE - xml2sav 2.0", 60)) // prod_name
@@ -38,11 +63,11 @@ func headerRecord(out io.Writer, fileLabel string) {
 	out.Write(stob("\x00\x00\x00", 3))                       // padding
 }
 
-func variableRecords(out io.Writer) {
+func (out *SpssWriter) variableRecords() {
 
 }
 
-func encodingRecord(out io.Writer) {
+func (out *SpssWriter) encodingRecord() {
 	binary.Write(out, endian, int32(7))  // rec_type
 	binary.Write(out, endian, int32(20)) // filler
 	binary.Write(out, endian, int32(1))  // size
@@ -50,24 +75,33 @@ func encodingRecord(out io.Writer) {
 	out.Write(stob("UTF-8", 5))          // encoding
 }
 
-func terminationRecord(out io.Writer) {
+func (out *SpssWriter) terminationRecord() {
 	binary.Write(out, endian, int32(999)) // rec_type
 	binary.Write(out, endian, int32(0))   // filler
 }
 
-func addVar(name string, kind int) {
-
+func (out *SpssWriter) addVar(v *Var) {
+	out.Dict = append(out.Dict, v)
+	out.DictMap[v.Name] = v
 }
 
-func clearCase() {
-
+func (out *SpssWriter) clearCase() {
+	for _, v := range out.Dict {
+		v.Value = ""
+		v.HasValue = false
+	}
 }
 
-func setVar(name, value string) {
-
+func (out *SpssWriter) setVar(name, value string) {
+	v, found := out.DictMap[name]
+	if !found {
+		log.Fatalln("Can not find the variable named", name)
+	}
+	v.Value = value
+	v.HasValue = true
 }
 
-func writeCase() {
+func (out *SpssWriter) writeCase() {
 
 }
 
@@ -80,8 +114,10 @@ func main() {
 	}
 	defer file.Close()
 
-	out := bufio.NewWriter(file)
-	defer out.Flush()
+	bufout := bufio.NewWriter(file)
+	defer bufout.Flush()
 
-	headerRecord(out, "Export from example.xsav")
+	out := &SpssWriter{Writer: bufout}
+
+	out.headerRecord("Export from example.xsav")
 }
