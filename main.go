@@ -78,6 +78,14 @@ func ftoa(f float64) string {
 	return strconv.FormatFloat(f, 'E', -1, 64)
 }
 
+func atof(s string) float64 {
+	v, err := strconv.ParseFloat(s, 32)
+	if err != nil {
+		log.Fatalln(err)
+	}
+	return v
+}
+
 func (out *SpssWriter) caseSize() int32 {
 	size := int32(0)
 	for range out.Dict {
@@ -146,14 +154,14 @@ func (out *SpssWriter) valueLabelRecord(v *Var) {
 	binary.Write(out, endian, int32(3))             // rec_type
 	binary.Write(out, endian, int32(len(v.Labels))) // label_count
 	for _, label := range v.Labels {
-		out.Write(stob(label.Value, 8)) // value
+		binary.Write(out, endian, atof(label.Value)) // value
 		l := len(label.Desc)
 		if l > 120 {
 			l = 120
 		}
-		binary.Write(out, endian, int32(l)) // label_len
-		out.Write(stob(label.Desc, l))      // label
-		pad := (8 - l) % 8
+		binary.Write(out, endian, byte(l)) // label_len
+		out.Write(stob(label.Desc, l))     // label
+		pad := (8 - l - 1) % 8
 		if pad < 0 {
 			pad += 8
 		}
