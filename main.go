@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -126,9 +127,28 @@ func (out *SpssWriter) variableRecords() {
 	}
 }
 
+func (out *SpssWriter) longVarNameRecords() {
+	binary.Write(out, endian, int32(7))  // rec_type
+	binary.Write(out, endian, int32(13)) // subtype
+	binary.Write(out, endian, int32(1))  // size
+
+	buf := bytes.Buffer{}
+	for _, v := range out.Dict {
+		buf.Write([]byte(v.ShortName))
+		buf.Write([]byte("="))
+		buf.Write([]byte(v.Name))
+		buf.Write([]byte{9})
+	}
+	if buf.Len() > 0 {
+		buf.UnreadByte() // remove last byte
+	}
+	binary.Write(out, endian, int32(buf.Len()))
+	out.Write(buf.Bytes())
+}
+
 func (out *SpssWriter) encodingRecord() {
 	binary.Write(out, endian, int32(7))  // rec_type
-	binary.Write(out, endian, int32(20)) // filler
+	binary.Write(out, endian, int32(20)) // subtype
 	binary.Write(out, endian, int32(1))  // size
 	binary.Write(out, endian, int32(5))  // filler
 	out.Write(stob("UTF-8", 5))          // encoding
@@ -140,12 +160,18 @@ func (out *SpssWriter) terminationRecord() {
 }
 
 func (out *SpssWriter) addVar(v *Var) {
+	// Trim long name
+	if len(v.Name) > 64 {
+		v.Name = v.Name[:64]
+	}
+
 	if _, found := out.DictMap[v.Name]; found {
 		log.Fatalln("Adding duplicate variable named", v.Name)
 	}
 
+	// Create unique short variable name
 	short := strings.ToUpper(v.Name)
-	count := 0
+	count := 1
 	if len(short) > 8 {
 		short = short[:8]
 	}
@@ -218,7 +244,7 @@ func main() {
 	out := NewSpssWriter(bufout)
 
 	out.addVar(&Var{
-		Name:     "eenhelelangevarname",
+		Name:     "eenhelelangevarname1",
 		Type:     0,
 		Print:    5,
 		Width:    8,
@@ -226,7 +252,7 @@ func main() {
 		Label:    "Test label",
 	})
 	out.addVar(&Var{
-		Name:     "TESTB",
+		Name:     "eenhelelangevarname2",
 		Type:     0,
 		Print:    5,
 		Width:    8,
@@ -235,12 +261,13 @@ func main() {
 	})
 	out.headerRecord("Export from example.xsav")
 	out.variableRecords()
+	out.longVarNameRecords()
 	out.encodingRecord()
 	out.terminationRecord()
 	for i := float64(0.0); i < 10; i += 0.1 {
 		out.clearCase()
-		out.setVar("eenhelelangevarname", ftoa(i))
-		out.setVar("TESTB", ftoa(i+0.03))
+		out.setVar("eenhelelangevarname1", ftoa(i))
+		out.setVar("eenhelelangevarname2", ftoa(i+0.03))
 		out.writeCase()
 	}
 	out.updateHeaderNCases(bufout, file)
