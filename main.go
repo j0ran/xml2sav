@@ -129,7 +129,11 @@ func (out *SpssWriter) variableRecords() {
 		if len(v.Label) > 0 {
 			binary.Write(out, endian, int32(len(v.Label))) // label_len
 			out.Write([]byte(v.Label))                     // label
-			for i, pad := 0, 4-len(v.Label)%4; i < pad; i++ {
+			pad := (4 - len(v.Label)) % 4
+			if pad < 0 {
+				pad += 4
+			}
+			for i := 0; i < pad; i++ {
 				out.Write([]byte{0}) // pad out until multiple of 32 bit
 			}
 		}
@@ -148,9 +152,13 @@ func (out *SpssWriter) valueLabelRecord(index int32) {
 		}
 		binary.Write(out, endian, int32(l)) // label_len
 		out.Write(stob(label.Desc, l))      // label
-		//for i, pad := 0, 8-l%8; i < pad; i++ {
-		//	out.Write([]byte{32})
-		//}
+		pad := (8 - l) % 8
+		if pad < 0 {
+			pad += 8
+		}
+		for i := 0; i < pad; i++ {
+			out.Write([]byte{32})
+		}
 	}
 
 	binary.Write(out, endian, int32(4)) // rec_type
