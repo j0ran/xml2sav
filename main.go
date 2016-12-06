@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -18,6 +20,7 @@ type Label struct {
 
 type Var struct {
 	Name       string
+	ShortName  string
 	Type       int32
 	Print      byte
 	Width      byte
@@ -32,15 +35,24 @@ type Var struct {
 
 var endian = binary.LittleEndian
 
+type Flusher interface {
+	Flush() error
+}
+
 type SpssWriter struct {
 	io.Writer
-	Dict    []*Var
-	DictMap map[string]*Var
-	Count   int
+	Dict     []*Var
+	DictMap  map[string]*Var
+	ShortMap map[string]*Var
+	Count    int32
 }
 
 func NewSpssWriter(w io.Writer) *SpssWriter {
-	return &SpssWriter{Writer: w, DictMap: make(map[string]*Var)}
+	return &SpssWriter{
+		Writer:   w,
+		DictMap:  make(map[string]*Var),
+		ShortMap: make(map[string]*Var),
+	}
 }
 
 func stob(s string, l int) []byte {
@@ -50,6 +62,10 @@ func stob(s string, l int) []byte {
 		s += strings.Repeat(" ", l-len(s))
 	}
 	return []byte(s)
+}
+
+func ftoa(f float64) string {
+	return strconv.FormatFloat(f, 'E', -1, 64)
 }
 
 func (out *SpssWriter) caseSize() int32 {
@@ -68,7 +84,7 @@ func (out *SpssWriter) headerRecord(fileLabel string) {
 	binary.Write(out, endian, out.caseSize())                // nominal_case_size
 	binary.Write(out, endian, int32(0))                      // compression
 	binary.Write(out, endian, int32(0))                      // weight_index
-	binary.Write(out, endian, int32(50))                     // ncases
+	binary.Write(out, endian, int32(-1))                     // ncases
 	binary.Write(out, endian, float64(100))                  // bias
 	out.Write(stob(c.Format("02 Jan 06"), 9))                // creation_date
 	out.Write(stob(c.Format("15:04:05"), 8))                 // creation_time
@@ -76,7 +92,14 @@ func (out *SpssWriter) headerRecord(fileLabel string) {
 	out.Write(stob("\x00\x00\x00", 3))                       // padding
 }
 
-func (out *SpssWriter) updateHeaderNCases() {
+// If you use a buffer, supply it as the flusher argument
+// After this close the file
+func (out *SpssWriter) updateHeaderNCases(flusher Flusher, seeker io.WriteSeeker) {
+	if flusher != nil {
+		flusher.Flush()
+	}
+	seeker.Seek(80, io.SeekStart)
+	binary.Write(seeker, endian, out.Count) // ncases in headerRecord
 }
 
 func (out *SpssWriter) variableRecords() {
@@ -92,7 +115,7 @@ func (out *SpssWriter) variableRecords() {
 		format := int32(v.Print)<<16 | int32(v.Width)<<8 | int32(v.Decimals)
 		binary.Write(out, endian, format) // print
 		binary.Write(out, endian, format) // write
-		out.Write(stob(v.Name, 8))        // name
+		out.Write(stob(v.ShortName, 8))   // name
 		if len(v.Label) > 0 {
 			binary.Write(out, endian, int32(len(v.Label))) // label_len
 			out.Write([]byte(v.Label))                     // label
@@ -117,8 +140,32 @@ func (out *SpssWriter) terminationRecord() {
 }
 
 func (out *SpssWriter) addVar(v *Var) {
+	if _, found := out.DictMap[v.Name]; found {
+		log.Fatalln("Adding duplicate variable named", v.Name)
+	}
+
+	short := strings.ToUpper(v.Name)
+	count := 0
+	if len(short) > 8 {
+		short = short[:8]
+	}
+	for {
+		_, found := out.ShortMap[short]
+		if !found {
+			break
+		}
+		count++
+		s := strconv.Itoa(count)
+		if len(short)+len(s) > 8 {
+			short = short[:8-len(s)]
+		}
+		short = short + s
+	}
+	v.ShortName = short
+
 	out.Dict = append(out.Dict, v)
 	out.DictMap[v.Name] = v
+	out.ShortMap[v.ShortName] = v
 }
 
 func (out *SpssWriter) clearCase() {
@@ -138,7 +185,24 @@ func (out *SpssWriter) setVar(name, value string) {
 }
 
 func (out *SpssWriter) writeCase() {
-
+	for _, v := range out.Dict {
+		if v.HasValue {
+			f, err := strconv.ParseFloat(v.Value, 64)
+			if err != nil {
+				log.Fatalln(err)
+			}
+			binary.Write(out, endian, f)
+		} else if v.HasDefault {
+			f, err := strconv.ParseFloat(v.Default, 64)
+			if err != nil {
+				log.Fatalln(err)
+			}
+			binary.Write(out, endian, f)
+		} else {
+			binary.Write(out, endian, -math.MaxFloat64)
+		}
+	}
+	out.Count++
 }
 
 func main() {
@@ -151,12 +215,10 @@ func main() {
 	defer file.Close()
 
 	bufout := bufio.NewWriter(file)
-	defer bufout.Flush()
-
 	out := NewSpssWriter(bufout)
 
 	out.addVar(&Var{
-		Name:     "TESTA",
+		Name:     "eenhelelangevarname",
 		Type:     0,
 		Print:    5,
 		Width:    8,
@@ -176,6 +238,10 @@ func main() {
 	out.encodingRecord()
 	out.terminationRecord()
 	for i := float64(0.0); i < 10; i += 0.1 {
-		binary.Write(out, endian, i)
+		out.clearCase()
+		out.setVar("eenhelelangevarname", ftoa(i))
+		out.setVar("TESTB", ftoa(i+0.03))
+		out.writeCase()
 	}
+	out.updateHeaderNCases(bufout, file)
 }
