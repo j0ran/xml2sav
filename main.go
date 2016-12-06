@@ -36,6 +36,7 @@ type SpssWriter struct {
 	io.Writer
 	Dict    []*Var
 	DictMap map[string]*Var
+	Count   int
 }
 
 func NewSpssWriter(w io.Writer) *SpssWriter {
@@ -51,12 +52,20 @@ func stob(s string, l int) []byte {
 	return []byte(s)
 }
 
+func (out *SpssWriter) caseSize() int32 {
+	size := int32(0)
+	for range out.Dict {
+		size++
+	}
+	return size
+}
+
 func (out *SpssWriter) headerRecord(fileLabel string) {
 	c := time.Now()
 	out.Write(stob("$FL2", 4))                               // rec_tyoe
 	out.Write(stob("@(#) SPSS DATA FILE - xml2sav 2.0", 60)) // prod_name
 	binary.Write(out, endian, int32(2))                      // layout_code
-	binary.Write(out, endian, int32(2))                      // nominal_case_size
+	binary.Write(out, endian, out.caseSize())                // nominal_case_size
 	binary.Write(out, endian, int32(0))                      // compression
 	binary.Write(out, endian, int32(0))                      // weight_index
 	binary.Write(out, endian, int32(50))                     // ncases
@@ -65,6 +74,9 @@ func (out *SpssWriter) headerRecord(fileLabel string) {
 	out.Write(stob(c.Format("15:04:05"), 8))                 // creation_time
 	out.Write(stob(fileLabel, 64))                           // file_label
 	out.Write(stob("\x00\x00\x00", 3))                       // padding
+}
+
+func (out *SpssWriter) updateHeaderNCases() {
 }
 
 func (out *SpssWriter) variableRecords() {
