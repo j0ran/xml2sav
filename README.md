@@ -2,6 +2,7 @@ README
 ======
 
 At the moment this program is not working yet. I am in the middle of development.
+Look at the current version here: https://sourceforge.net/p/xml2sav/code/HEAD/tree/trunk/
 
 XML to SPSS Converter (xml2sav)
 -------------------------------
