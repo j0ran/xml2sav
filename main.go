@@ -230,14 +230,13 @@ func (out *SpssWriter) longVarNameRecords() {
 	binary.Write(out, endian, int32(1))  // size
 
 	buf := bytes.Buffer{}
-	for _, v := range out.Dict {
+	for i, v := range out.Dict {
 		buf.Write([]byte(v.ShortName))
 		buf.Write([]byte("="))
 		buf.Write([]byte(v.Name))
-		buf.Write([]byte{9})
-	}
-	if buf.Len() > 0 {
-		buf.UnreadByte() // remove last byte
+		if i < len(out.Dict)-1 {
+			buf.Write([]byte{9})
+		}
 	}
 	binary.Write(out, endian, int32(buf.Len()))
 	out.Write(buf.Bytes())
