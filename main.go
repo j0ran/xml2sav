@@ -151,7 +151,12 @@ func (out *SpssWriter) variableRecords() {
 			binary.Write(out, endian, int32(0)) // has_var_label
 		}
 		binary.Write(out, endian, int32(0)) // n_missing_values
-		format := int32(v.Print)<<16 | int32(v.Width)<<8 | int32(v.Decimals)
+		var format int32
+		if v.Type > 0 { // string
+			format = int32(v.Print)<<16 | int32(v.Type)<<8
+		} else { // number
+			format = int32(v.Print)<<16 | int32(v.Width)<<8 | int32(v.Decimals)
+		}
 		binary.Write(out, endian, format) // print
 		binary.Write(out, endian, format) // write
 		out.Write(stob(v.ShortName, 8))   // name
@@ -209,8 +214,13 @@ func (out *SpssWriter) variableDisplayParameterRecord() {
 	binary.Write(out, endian, out.VarCount()*3) // count
 	for _, v := range out.Dict {
 		binary.Write(out, endian, v.Measure) // measure
-		binary.Write(out, endian, int32(8))  // meawidthsure
-		binary.Write(out, endian, int32(1))  // alignment (right)
+		if v.Type > 0 {
+			binary.Write(out, endian, v.Type)   // width
+			binary.Write(out, endian, int32(0)) // alignment (left)
+		} else {
+			binary.Write(out, endian, int32(8)) // width
+			binary.Write(out, endian, int32(1)) // alignment (right)
+		}
 	}
 }
 
@@ -247,6 +257,10 @@ func (out *SpssWriter) terminationRecord() {
 }
 
 func (out *SpssWriter) AddVar(v *Var) {
+	if v.Type > 255 {
+		log.Fatalln("Maximum length for a variable is 255,", v.Name, "is", v.Type)
+	}
+
 	// Trim long name
 	if len(v.Name) > 64 {
 		v.Name = v.Name[:64]
@@ -302,18 +316,29 @@ func (out *SpssWriter) SetVar(name, value string) {
 
 func (out *SpssWriter) WriteCase() {
 	for _, v := range out.Dict {
-		if v.HasValue {
-			f, err := strconv.ParseFloat(v.Value, 64)
-			if err != nil {
-				log.Fatalln(err)
+		if v.HasValue || v.HasDefault {
+			var val string
+			if v.HasValue {
+				val = v.Value
+			} else {
+				val = v.Default
 			}
-			binary.Write(out, endian, f)
-		} else if v.HasDefault {
-			f, err := strconv.ParseFloat(v.Default, 64)
-			if err != nil {
-				log.Fatalln(err)
+
+			if v.Type > 0 { // string
+				l := len(val)
+				if l > int(v.Type) {
+					l = int(v.Type)
+					log.Println("Truncated string:", val)
+				}
+				ll := (((int(v.Type) - 1) >> 3) + 1) << 3
+				out.Write(stob(val, ll))
+			} else { // number
+				f, err := strconv.ParseFloat(val, 64)
+				if err != nil {
+					log.Fatalln(err)
+				}
+				binary.Write(out, endian, f)
 			}
-			binary.Write(out, endian, f)
 		} else {
 			binary.Write(out, endian, -math.MaxFloat64)
 		}
@@ -376,12 +401,20 @@ func main() {
 		Label:    "ab",
 		Labels:   []Label{Label{"0", "Man"}, Label{"1", "Vrouw"}},
 	})
+	out.AddVar(&Var{
+		Name:    "s1",
+		Type:    7,
+		Print:   SPSS_FMT_A,
+		Measure: SPSS_MLVL_NOM,
+		Label:   "Joran was here",
+	})
 	out.Start("Export from example.xsav", -1)
 	for i := float64(0.0); i < 10; i += 0.1 {
 		out.ClearCase()
 		out.SetVar("eenhelelangevarname1", ftoa(i))
 		out.SetVar("eenhelelangevarname2", ftoa(i+0.03))
 		out.SetVar("abc", "0")
+		out.SetVar("s1", "COUNT"+strconv.Itoa(int(out.Count)))
 		out.WriteCase()
 	}
 	out.Finish(bufout, file)
