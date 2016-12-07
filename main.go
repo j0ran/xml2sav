@@ -40,6 +40,7 @@ type Var struct {
 	Print      byte
 	Width      byte
 	Decimals   byte
+	Measure    int32
 	Label      string
 	Default    string
 	HasDefault bool
@@ -106,6 +107,10 @@ func (out *SpssWriter) caseSize() int32 {
 		size++
 	}
 	return size
+}
+
+func (out *SpssWriter) VarCount() int32 {
+	return int32(len(out.Dict))
 }
 
 func (out *SpssWriter) headerRecord(fileLabel string, ncases int32) {
@@ -194,6 +199,18 @@ func (out *SpssWriter) valueLabelRecords() {
 		if len(v.Labels) > 0 {
 			out.valueLabelRecord(v)
 		}
+	}
+}
+
+func (out *SpssWriter) variableDisplayParameterRecord() {
+	binary.Write(out, endian, int32(7))         // rec_type
+	binary.Write(out, endian, int32(11))        // subtype
+	binary.Write(out, endian, int32(4))         // size
+	binary.Write(out, endian, out.VarCount()*3) // count
+	for _, v := range out.Dict {
+		binary.Write(out, endian, v.Measure) // measure
+		binary.Write(out, endian, int32(8))  // meawidthsure
+		binary.Write(out, endian, int32(1))  // alignment (right)
 	}
 }
 
@@ -308,6 +325,7 @@ func (out *SpssWriter) Start(fileLabel string, ncases int32) {
 	out.headerRecord(fileLabel, ncases)
 	out.variableRecords()
 	out.valueLabelRecords()
+	out.variableDisplayParameterRecord()
 	out.longVarNameRecords()
 	out.encodingRecord()
 	out.terminationRecord()
@@ -335,6 +353,7 @@ func main() {
 		Print:    SPSS_FMT_F,
 		Width:    8,
 		Decimals: 2,
+		Measure:  SPSS_MLVL_RAT,
 		Label:    "Test label",
 		Labels:   []Label{Label{"0", "A"}, Label{"1", "B"}, Label{"2", "C"}},
 	})
@@ -344,6 +363,7 @@ func main() {
 		Print:    SPSS_FMT_F,
 		Width:    8,
 		Decimals: 2,
+		Measure:  SPSS_MLVL_RAT,
 		Label:    "Test label",
 	})
 	out.AddVar(&Var{
@@ -352,6 +372,7 @@ func main() {
 		Print:    SPSS_FMT_F,
 		Width:    8,
 		Decimals: 2,
+		Measure:  SPSS_MLVL_NOM,
 		Label:    "ab",
 		Labels:   []Label{Label{"0", "Man"}, Label{"1", "Vrouw"}},
 	})
