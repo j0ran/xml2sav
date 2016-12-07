@@ -55,6 +55,7 @@ func NewSpssWriter(w io.Writer) *SpssWriter {
 		Writer:   w,
 		DictMap:  make(map[string]*Var),
 		ShortMap: make(map[string]*Var),
+		Index:    1,
 	}
 }
 
@@ -170,9 +171,9 @@ func (out *SpssWriter) valueLabelRecord(v *Var) {
 		}
 	}
 
-	binary.Write(out, endian, int32(4)) // rec_type
-	binary.Write(out, endian, int32(1)) // var_count
-	binary.Write(out, endian, v.Index)  // vars
+	binary.Write(out, endian, int32(4))       // rec_type
+	binary.Write(out, endian, int32(1))       // var_count
+	binary.Write(out, endian, int32(v.Index)) // vars
 }
 
 func (out *SpssWriter) valueLabelRecords() {
@@ -293,7 +294,7 @@ func (out *SpssWriter) WriteCase() {
 func (out *SpssWriter) Start(fileLabel string, ncases int32) {
 	out.headerRecord(fileLabel, ncases)
 	out.variableRecords()
-	//out.valueLabelRecords()
+	out.valueLabelRecords()
 	out.longVarNameRecords()
 	out.encodingRecord()
 	out.terminationRecord()
@@ -322,6 +323,7 @@ func main() {
 		Width:    8,
 		Decimals: 2,
 		Label:    "Test label",
+		Labels:   []Label{Label{"0", "A"}, Label{"1", "B"}, Label{"2", "C"}},
 	})
 	out.AddVar(&Var{
 		Name:     "eenhelelangevarname2",
