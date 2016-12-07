@@ -14,6 +14,19 @@ import (
 	"time"
 )
 
+const (
+	SPSS_FMT_A         = 1
+	SPSS_FMT_F         = 5
+	SPSS_FMT_DATE      = 20
+	SPSS_FMT_DATE_TIME = 22
+)
+
+const (
+	SPSS_MLVL_NOM = 1
+	SPSS_MLVL_ORD = 2
+	SPSS_MLVL_RAT = 3
+)
+
 type Label struct {
 	Value string
 	Desc  string
@@ -319,7 +332,7 @@ func main() {
 	out.AddVar(&Var{
 		Name:     "eenhelelangevarname1",
 		Type:     0,
-		Print:    5,
+		Print:    SPSS_FMT_F,
 		Width:    8,
 		Decimals: 2,
 		Label:    "Test label",
@@ -328,7 +341,7 @@ func main() {
 	out.AddVar(&Var{
 		Name:     "eenhelelangevarname2",
 		Type:     0,
-		Print:    5,
+		Print:    SPSS_FMT_F,
 		Width:    8,
 		Decimals: 2,
 		Label:    "Test label",
@@ -336,7 +349,7 @@ func main() {
 	out.AddVar(&Var{
 		Name:     "abc",
 		Type:     0,
-		Print:    5,
+		Print:    SPSS_FMT_F,
 		Width:    8,
 		Decimals: 2,
 		Label:    "ab",
