@@ -119,7 +119,7 @@ func (out *SpssWriter) VarCount() int32 {
 	return int32(len(out.Dict))
 }
 
-func (out *SpssWriter) headerRecord(fileLabel string, ncases int32) {
+func (out *SpssWriter) headerRecord(fileLabel string) {
 	c := time.Now()
 	out.Write(stob("$FL2", 4))                               // rec_tyoe
 	out.Write(stob("@(#) SPSS DATA FILE - xml2sav 2.0", 60)) // prod_name
@@ -127,7 +127,7 @@ func (out *SpssWriter) headerRecord(fileLabel string, ncases int32) {
 	binary.Write(out, endian, out.caseSize())                // nominal_case_size
 	binary.Write(out, endian, int32(0))                      // compression
 	binary.Write(out, endian, int32(0))                      // weight_index
-	binary.Write(out, endian, int32(ncases))                 // ncases
+	binary.Write(out, endian, int32(-1))                     // ncases
 	binary.Write(out, endian, float64(100))                  // bias
 	out.Write(stob(c.Format("02 Jan 06"), 9))                // creation_date
 	out.Write(stob(c.Format("15:04:05"), 8))                 // creation_time
@@ -360,8 +360,8 @@ func (out *SpssWriter) WriteCase() {
 	out.Count++
 }
 
-func (out *SpssWriter) Start(fileLabel string, ncases int32) {
-	out.headerRecord(fileLabel, ncases)
+func (out *SpssWriter) Start(fileLabel string) {
+	out.headerRecord(fileLabel)
 	out.variableRecords()
 	out.valueLabelRecords()
 	out.variableDisplayParameterRecord()
@@ -431,7 +431,7 @@ func main() {
 		Label:    "",
 		Labels:   []Label{Label{"0", "aaaa"}, Label{"1", "bbbb"}},
 	})
-	out.Start("Export from example.xsav", -1)
+	out.Start("Export from example.xsav")
 	for i := float64(0.0); i < 10; i += 0.1 {
 		out.ClearCase()
 		out.SetVar("eenhelelangevarname1", ftoa(i))
