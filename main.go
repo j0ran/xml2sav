@@ -56,7 +56,8 @@ type Flusher interface {
 }
 
 type SpssWriter struct {
-	io.Writer
+	*bufio.Writer
+	seeker   io.WriteSeeker
 	Dict     []*Var
 	DictMap  map[string]*Var // Long variable names index
 	ShortMap map[string]*Var // Short variable names index
@@ -64,9 +65,10 @@ type SpssWriter struct {
 	Index    int32
 }
 
-func NewSpssWriter(w io.Writer) *SpssWriter {
+func NewSpssWriter(w io.WriteSeeker) *SpssWriter {
 	return &SpssWriter{
-		Writer:   w,
+		seeker:   w,
+		Writer:   bufio.NewWriter(w),
 		DictMap:  make(map[string]*Var),
 		ShortMap: make(map[string]*Var),
 		Index:    1,
@@ -109,6 +111,10 @@ func (out *SpssWriter) caseSize() int32 {
 	return size
 }
 
+func (out *SpssWriter) Seek(offset int64, whence int) (int64, error) {
+	return out.seeker.Seek(offset, whence)
+}
+
 func (out *SpssWriter) VarCount() int32 {
 	return int32(len(out.Dict))
 }
@@ -131,14 +137,10 @@ func (out *SpssWriter) headerRecord(fileLabel string, ncases int32) {
 
 // If you use a buffer, supply it as the flusher argument
 // After this close the file
-func (out *SpssWriter) updateHeaderNCases(flusher Flusher, seeker io.WriteSeeker) {
-	if flusher != nil {
-		flusher.Flush()
-	}
-	if seeker != nil {
-		seeker.Seek(80, 0)
-		binary.Write(seeker, endian, out.Count) // ncases in headerRecord
-	}
+func (out *SpssWriter) updateHeaderNCases() {
+	out.Flush()
+	out.Seek(80, 0)
+	binary.Write(out.seeker, endian, out.Count) // ncases in headerRecord
 }
 
 func (out *SpssWriter) variableRecords() {
@@ -368,8 +370,8 @@ func (out *SpssWriter) Start(fileLabel string, ncases int32) {
 	out.terminationRecord()
 }
 
-func (out *SpssWriter) Finish(flusher Flusher, seeker io.WriteSeeker) {
-	out.updateHeaderNCases(flusher, seeker)
+func (out *SpssWriter) Finish() {
+	out.updateHeaderNCases()
 }
 
 func main() {
@@ -381,8 +383,7 @@ func main() {
 	}
 	defer file.Close()
 
-	bufout := bufio.NewWriter(file)
-	out := NewSpssWriter(bufout)
+	out := NewSpssWriter(file)
 
 	out.AddVar(&Var{
 		Name:     "eenhelelangevarname1",
@@ -440,5 +441,5 @@ func main() {
 		out.SetVar("xxxxx", ftoa(i*i))
 		out.WriteCase()
 	}
-	out.Finish(bufout, file)
+	out.Finish()
 }
