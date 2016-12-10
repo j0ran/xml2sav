@@ -58,9 +58,9 @@ type Flusher interface {
 type SpssWriter struct {
 	io.Writer
 	Dict     []*Var
-	DictMap  map[string]*Var
-	ShortMap map[string]*Var
-	Count    int32
+	DictMap  map[string]*Var // Long variable names index
+	ShortMap map[string]*Var // Short variable names index
+	Count    int32           // Number of cases
 	Index    int32
 }
 
@@ -136,7 +136,7 @@ func (out *SpssWriter) updateHeaderNCases(flusher Flusher, seeker io.WriteSeeker
 		flusher.Flush()
 	}
 	if seeker != nil {
-		seeker.Seek(80, io.SeekStart)
+		seeker.Seek(80, 0)
 		binary.Write(seeker, endian, out.Count) // ncases in headerRecord
 	}
 }
@@ -169,6 +169,19 @@ func (out *SpssWriter) variableRecords() {
 			}
 			for i := 0; i < pad; i++ {
 				out.Write([]byte{0}) // pad out until multiple of 32 bit
+			}
+		}
+
+		if v.Type > 8 { // handle long string
+			count := int((v.Type - 1) >> 3) // number of extra vars to store string
+			for i := 0; i < count; i++ {
+				binary.Write(out, endian, int32(2))  // rec_type
+				binary.Write(out, endian, int32(-1)) // extended string part
+				binary.Write(out, endian, int32(0))  // has_var_label
+				binary.Write(out, endian, int32(0))  // n_missing_valuess
+				binary.Write(out, endian, int32(0))  // print
+				binary.Write(out, endian, int32(0))  // write
+				out.Write(stob("        ", 8))       // name
 			}
 		}
 	}
@@ -402,7 +415,7 @@ func main() {
 	})
 	out.AddVar(&Var{
 		Name:    "s1",
-		Type:    7,
+		Type:    10,
 		Print:   SPSS_FMT_A,
 		Measure: SPSS_MLVL_NOM,
 		Label:   "Joran was here",
@@ -413,7 +426,7 @@ func main() {
 		out.SetVar("eenhelelangevarname1", ftoa(i))
 		out.SetVar("eenhelelangevarname2", ftoa(i+0.03))
 		out.SetVar("abc", "0")
-		out.SetVar("s1", "COUNT"+strconv.Itoa(int(out.Count)))
+		out.SetVar("s1", "XXCOUNT"+strconv.Itoa(int(out.Count)))
 		out.WriteCase()
 	}
 	out.Finish(bufout, file)
