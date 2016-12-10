@@ -103,8 +103,8 @@ func atof(s string) float64 {
 
 func (out *SpssWriter) caseSize() int32 {
 	size := int32(0)
-	for range out.Dict {
-		size++
+	for _, v := range out.Dict {
+		size += ((v.Type - 1) / 8) + 1
 	}
 	return size
 }
@@ -283,7 +283,7 @@ func (out *SpssWriter) AddVar(v *Var) {
 	}
 
 	v.Index = out.Index
-	out.Index++
+	out.Index += ((v.Type - 1) / 8) + 1
 
 	// Create unique short variable name
 	short := strings.ToUpper(v.Name)
@@ -415,10 +415,20 @@ func main() {
 	})
 	out.AddVar(&Var{
 		Name:    "s1",
-		Type:    10,
+		Type:    20,
 		Print:   SPSS_FMT_A,
 		Measure: SPSS_MLVL_NOM,
 		Label:   "Joran was here",
+	})
+	out.AddVar(&Var{
+		Name:     "xxxxx",
+		Type:     0,
+		Print:    SPSS_FMT_F,
+		Width:    8,
+		Decimals: 2,
+		Measure:  SPSS_MLVL_NOM,
+		Label:    "",
+		Labels:   []Label{Label{"0", "aaaa"}, Label{"1", "bbbb"}},
 	})
 	out.Start("Export from example.xsav", -1)
 	for i := float64(0.0); i < 10; i += 0.1 {
@@ -427,6 +437,7 @@ func main() {
 		out.SetVar("eenhelelangevarname2", ftoa(i+0.03))
 		out.SetVar("abc", "0")
 		out.SetVar("s1", "XXCOUNT"+strconv.Itoa(int(out.Count)))
+		out.SetVar("xxxxx", ftoa(i*i))
 		out.WriteCase()
 	}
 	out.Finish(bufout, file)
