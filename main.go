@@ -443,3 +443,7 @@ func main() {
 	}
 	out.Finish()
 }
+
+// Remove illegal variables from var names and show message about it in log
+// Implement labels for long strings
+// Read xsav files and generate sav files
