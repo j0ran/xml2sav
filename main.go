@@ -18,6 +18,8 @@ import (
 
 const SPSS_NUMERIC = 0
 
+const TimeOffset = 12219379200
+
 const (
 	SPSS_FMT_A         = 1
 	SPSS_FMT_F         = 5
@@ -32,6 +34,7 @@ const (
 )
 
 var defaultStringLength = 255
+var maxPrintStringWidth = 40
 
 type Label struct {
 	Value string
@@ -252,7 +255,11 @@ func (out *SpssWriter) variableDisplayParameterRecord() {
 	for _, v := range out.Dict {
 		binary.Write(out, endian, v.Measure) // measure
 		if v.Type > 0 {
-			binary.Write(out, endian, v.Type)   // width
+			if v.Type <= int32(maxPrintStringWidth) {
+				binary.Write(out, endian, v.Type) // width
+			} else {
+				binary.Write(out, endian, int32(maxPrintStringWidth)) // width
+			}
 			binary.Write(out, endian, int32(0)) // alignment (left)
 		} else {
 			binary.Write(out, endian, int32(8)) // width
@@ -400,13 +407,24 @@ func (out *SpssWriter) WriteCase() {
 			}
 
 			if v.Type > 0 { // string
-				l := len(val)
-				if l > int(v.Type) {
-					l = int(v.Type)
+				if len(val) > int(v.Type) {
+					val = val[:v.Type]
 					log.Println("Truncated string:", val)
 				}
-				ll := (((int(v.Type) - 1) >> 3) + 1) << 3
+				ll := (((int(v.Type) - 1) / 8) + 1) * 8
 				out.Write(stob(val, ll))
+			} else if v.Print == SPSS_FMT_DATE {
+				t, err := time.Parse("2-Jan-2006", v.Value)
+				if err != nil {
+					log.Fatalln(err)
+				}
+				binary.Write(out, endian, float64(t.Unix()+TimeOffset))
+			} else if v.Print == SPSS_FMT_DATE_TIME {
+				t, err := time.Parse("2-Jan-2006 15:04:05", v.Value)
+				if err != nil {
+					log.Fatalln(err)
+				}
+				binary.Write(out, endian, float64(t.Unix()+TimeOffset))
 			} else { // number
 				f, err := strconv.ParseFloat(val, 64)
 				if err != nil {
@@ -414,8 +432,12 @@ func (out *SpssWriter) WriteCase() {
 				}
 				binary.Write(out, endian, f)
 			}
-		} else {
-			binary.Write(out, endian, -math.MaxFloat64)
+		} else { // Write missing value
+			if v.Type > 0 {
+				out.Write(stob("", (((int(v.Type)-1)/8)+1)*8))
+			} else {
+				binary.Write(out, endian, -math.MaxFloat64)
+			}
 		}
 	}
 	out.Count++
@@ -524,7 +546,7 @@ func parseXSav(in io.Reader) error {
 						v.Width = byte(varxml.Width)
 					}
 					v.Decimals = 2
-					if hasAttr(&t, "width") {
+					if hasAttr(&t, "decimals") {
 						v.Decimals = byte(varxml.Decimals)
 					}
 				case "date":
@@ -532,8 +554,8 @@ func parseXSav(in io.Reader) error {
 					v.Width = 11
 					v.Decimals = 0
 					v.Measure = SPSS_MLVL_RAT
-				case "datatime":
-					v.Print = SPSS_FMT_DATE
+				case "datetime":
+					v.Print = SPSS_FMT_DATE_TIME
 					v.Width = 20
 					v.Decimals = 0
 					v.Measure = SPSS_MLVL_RAT
@@ -573,6 +595,7 @@ func parseXSav(in io.Reader) error {
 				if err = decoder.DecodeElement(&valxml, &t); err != nil {
 					return err
 				}
+				out.SetVar(valxml.Name, valxml.Value)
 			}
 		case xml.EndElement:
 			switch t.Name.Local {
