@@ -5,11 +5,13 @@ import (
 	"bytes"
 	"encoding/binary"
 	"encoding/xml"
+	"flag"
 	"fmt"
 	"io"
 	"log"
 	"math"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -498,7 +500,8 @@ func hasAttr(element *xml.StartElement, name string) bool {
 	return false
 }
 
-func parseXSav(in io.Reader) error {
+func parseXSav(in io.Reader, basename string) error {
+	basename = strings.TrimSuffix(basename, filepath.Ext(basename))
 	var filename string
 	var f *os.File
 	var out *SpssWriter
@@ -517,12 +520,13 @@ func parseXSav(in io.Reader) error {
 		case xml.StartElement:
 			switch t.Name.Local {
 			case "sav":
-				filename = getAttr(&t, "name")
+				filename = fmt.Sprintf("%s_%s.sav", basename, getAttr(&t, "name"))
 				f, err = os.Create(filename + ".sav")
 				if err != nil {
 					log.Fatalln(err)
 				}
 				out = NewSpssWriter(f)
+				log.Println("Writing", filename)
 			case "var":
 				if dictDone {
 					log.Fatalln("Adding variables while the dictionary already finished")
@@ -618,133 +622,39 @@ func parseXSav(in io.Reader) error {
 	return nil
 }
 
-func main() {
-	fmt.Println("xml2sav")
+func init() {
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: xml2sav [options] <file.xsav>")
+		flag.PrintDefaults()
+	}
+}
 
-	in, err := os.Open("test.xsav")
+func main() {
+	flag.Parse()
+	if len(flag.Args()) != 1 {
+		flag.Usage()
+		os.Exit(1)
+	}
+	filename := flag.Arg(0)
+
+	fmt.Println("xml2sav 2.0  Copyright (C) 2009-2016  A.J. Jessurun")
+	fmt.Println("This program comes with ABSOLUTELY NO WARRANTY.")
+	fmt.Println("This is free software, and you are welcome to redistribute it")
+	fmt.Println("under certain conditions. See the file COPYING.txt.")
+
+	in, err := os.Open(filename)
 	if err != nil {
 		log.Fatalln(err)
 	}
 	defer in.Close()
 
-	if err = parseXSav(in); err != nil {
+	log.Println("Reading", filename)
+
+	if err = parseXSav(in, filename); err != nil {
 		log.Fatalln(err)
 	}
 
-	file, err := os.Create("test.sav")
-	if err != nil {
-		log.Fatalln(err)
-	}
-	defer file.Close()
-
-	out := NewSpssWriter(file)
-
-	out.AddVar(&Var{
-		Name:     "eenhelelangevarname1",
-		Type:     0,
-		Print:    SPSS_FMT_F,
-		Width:    8,
-		Decimals: 2,
-		Measure:  SPSS_MLVL_RAT,
-		Label:    "Test label",
-		Labels:   []Label{Label{"0", "A"}, Label{"1", "B"}, Label{"2", "C"}},
-	})
-	out.AddVar(&Var{
-		Name:     "eenhelelangevarname2",
-		Type:     0,
-		Print:    SPSS_FMT_F,
-		Width:    8,
-		Decimals: 2,
-		Measure:  SPSS_MLVL_RAT,
-		Label:    "Test label",
-	})
-	out.AddVar(&Var{
-		Name:     "abc",
-		Type:     0,
-		Print:    SPSS_FMT_F,
-		Width:    8,
-		Decimals: 2,
-		Measure:  SPSS_MLVL_NOM,
-		Label:    "ab",
-		Labels:   []Label{Label{"0", "Man"}, Label{"1", "Vrouw"}},
-	})
-	out.AddVar(&Var{
-		Name:    "s1",
-		Type:    20,
-		Print:   SPSS_FMT_A,
-		Measure: SPSS_MLVL_NOM,
-		Label:   "Joran was here",
-	})
-	out.AddVar(&Var{
-		Name:     "xxxxx",
-		Type:     0,
-		Print:    SPSS_FMT_F,
-		Width:    8,
-		Decimals: 2,
-		Measure:  SPSS_MLVL_NOM,
-		Label:    "",
-		Labels:   []Label{Label{"0", "aaaa"}, Label{"1", "bbbb"}},
-	})
-	out.AddVar(&Var{
-		Name:    "s2",
-		Type:    7,
-		Print:   SPSS_FMT_A,
-		Measure: SPSS_MLVL_NOM,
-		Label:   "Test labels",
-		Labels:  []Label{Label{"A", "Letter A"}, Label{"TEST", "Test label"}},
-	})
-	out.AddVar(&Var{
-		Name:    "s3",
-		Type:    12,
-		Print:   SPSS_FMT_A,
-		Measure: SPSS_MLVL_NOM,
-		Label:   "Test labels",
-		Labels:  []Label{Label{"A", "Letter A"}, Label{"TEST", "Test label"}, Label{"ABCDEFGHIJKL", "Alphabed"}},
-	})
-	out.AddVar(&Var{
-		Name:    "s4",
-		Type:    12,
-		Print:   SPSS_FMT_A,
-		Measure: SPSS_MLVL_NOM,
-		Label:   "Test labels",
-		Labels:  []Label{Label{"A", "Hallo"}, Label{"TEST", "Daar"}, Label{"ABCDEFGHIJKL", "Allemaal"}},
-	})
-	out.AddVar(&Var{
-		Name:    "()()G324",
-		Type:    8,
-		Print:   SPSS_FMT_A,
-		Measure: SPSS_MLVL_NOM,
-	})
-	out.Start("Export from example.xsav")
-	for i := float64(0.0); i < 10; i += 0.1 {
-		out.ClearCase()
-		out.SetVar("eenhelelangevarname1", ftoa(i))
-		out.SetVar("eenhelelangevarname2", ftoa(i+0.03))
-		out.SetVar("abc", "0")
-		out.SetVar("s1", "XXCOUNT"+strconv.Itoa(int(out.Count)))
-		out.SetVar("xxxxx", ftoa(i*i))
-		if i < 5 {
-			out.SetVar("s2", "A")
-		} else {
-			out.SetVar("s2", "TEST")
-		}
-		if i < 3 {
-			out.SetVar("s3", "A")
-		} else if i < 6 {
-			out.SetVar("s3", "ABCDEFGHIJKL")
-		} else {
-			out.SetVar("s3", "TEST")
-		}
-		if i < 3 {
-			out.SetVar("s4", "A")
-		} else if i < 6 {
-			out.SetVar("s4", "ABCDEFGHIJKL")
-		} else {
-			out.SetVar("s4", "TEST")
-		}
-		out.WriteCase()
-	}
-	out.Finish()
+	log.Println("Done.")
 }
 
 // Read xsav files and generate sav files
