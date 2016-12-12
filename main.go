@@ -189,35 +189,35 @@ func (out *SpssWriter) variableRecords() {
 	}
 }
 
-func (out *SpssWriter) valueLabelRecord(v *Var) {
-	binary.Write(out, endian, int32(3))             // rec_type
-	binary.Write(out, endian, int32(len(v.Labels))) // label_count
-	for _, label := range v.Labels {
-		binary.Write(out, endian, atof(label.Value)) // value
-		l := len(label.Desc)
-		if l > 120 {
-			l = 120
-		}
-		binary.Write(out, endian, byte(l)) // label_len
-		out.Write(stob(label.Desc, l))     // label
-		pad := (8 - l - 1) % 8
-		if pad < 0 {
-			pad += 8
-		}
-		for i := 0; i < pad; i++ {
-			out.Write([]byte{32})
-		}
-	}
-
-	binary.Write(out, endian, int32(4))       // rec_type
-	binary.Write(out, endian, int32(1))       // var_count
-	binary.Write(out, endian, int32(v.Index)) // vars
-}
-
 func (out *SpssWriter) valueLabelRecords() {
 	for _, v := range out.Dict {
-		if len(v.Labels) > 0 {
-			out.valueLabelRecord(v)
+		if len(v.Labels) > 0 && v.Type <= 8 {
+			binary.Write(out, endian, int32(3))             // rec_type
+			binary.Write(out, endian, int32(len(v.Labels))) // label_count
+			for _, label := range v.Labels {
+				if v.Type == 0 {
+					binary.Write(out, endian, atof(label.Value)) // value
+				} else {
+					binary.Write(out, endian, stob(label.Value, 8)) // value
+				}
+				l := len(label.Desc)
+				if l > 120 {
+					l = 120
+				}
+				binary.Write(out, endian, byte(l)) // label_len
+				out.Write(stob(label.Desc, l))     // label
+				pad := (8 - l - 1) % 8
+				if pad < 0 {
+					pad += 8
+				}
+				for i := 0; i < pad; i++ {
+					out.Write([]byte{32})
+				}
+			}
+
+			binary.Write(out, endian, int32(4))       // rec_type
+			binary.Write(out, endian, int32(1))       // var_count
+			binary.Write(out, endian, int32(v.Index)) // vars
 		}
 	}
 }
@@ -263,6 +263,43 @@ func (out *SpssWriter) encodingRecord() {
 	binary.Write(out, endian, int32(1))  // size
 	binary.Write(out, endian, int32(5))  // filler
 	out.Write(stob("UTF-8", 5))          // encoding
+}
+
+func (out *SpssWriter) longStringValueLabelsRecord() {
+	// Check if we have any
+	any := false
+	for _, v := range out.Dict {
+		if len(v.Labels) > 0 && v.Type > 8 {
+			any = true
+			break
+		}
+	}
+	if !any {
+		return
+	}
+
+	// Create record
+	buf := new(bytes.Buffer)
+	for _, v := range out.Dict {
+		if len(v.Labels) > 0 && v.Type > 8 {
+			binary.Write(buf, endian, int32(len(v.ShortName))) // var_name_len
+			buf.Write([]byte(v.ShortName))                     // var_name
+			binary.Write(buf, endian, v.Type)                  // var_width
+			binary.Write(buf, endian, int32(len(v.Labels)))    // n_labels
+			for _, l := range v.Labels {
+				binary.Write(buf, endian, int32(len(l.Value))) // value_len
+				buf.Write([]byte(l.Value))                     // value
+				binary.Write(buf, endian, int32(len(l.Desc)))  // label_len
+				buf.Write([]byte(l.Desc))                      //label
+			}
+		}
+	}
+
+	binary.Write(out, endian, int32(7))         // rec_type
+	binary.Write(out, endian, int32(21))        // subtype
+	binary.Write(out, endian, int32(1))         // size
+	binary.Write(out, endian, int32(buf.Len())) // count
+	out.Write(buf.Bytes())
 }
 
 func (out *SpssWriter) terminationRecord() {
@@ -367,6 +404,7 @@ func (out *SpssWriter) Start(fileLabel string) {
 	out.variableDisplayParameterRecord()
 	out.longVarNameRecords()
 	out.encodingRecord()
+	out.longStringValueLabelsRecord()
 	out.terminationRecord()
 }
 
@@ -431,6 +469,30 @@ func main() {
 		Label:    "",
 		Labels:   []Label{Label{"0", "aaaa"}, Label{"1", "bbbb"}},
 	})
+	out.AddVar(&Var{
+		Name:    "s2",
+		Type:    7,
+		Print:   SPSS_FMT_A,
+		Measure: SPSS_MLVL_NOM,
+		Label:   "Test labels",
+		Labels:  []Label{Label{"A", "Letter A"}, Label{"TEST", "Test label"}},
+	})
+	out.AddVar(&Var{
+		Name:    "s3",
+		Type:    12,
+		Print:   SPSS_FMT_A,
+		Measure: SPSS_MLVL_NOM,
+		Label:   "Test labels",
+		Labels:  []Label{Label{"A", "Letter A"}, Label{"TEST", "Test label"}, Label{"ABCDEFGHIJKL", "Alphabed"}},
+	})
+	out.AddVar(&Var{
+		Name:    "s4",
+		Type:    12,
+		Print:   SPSS_FMT_A,
+		Measure: SPSS_MLVL_NOM,
+		Label:   "Test labels",
+		Labels:  []Label{Label{"A", "Hallo"}, Label{"TEST", "Daar"}, Label{"ABCDEFGHIJKL", "Allemaal"}},
+	})
 	out.Start("Export from example.xsav")
 	for i := float64(0.0); i < 10; i += 0.1 {
 		out.ClearCase()
@@ -439,11 +501,29 @@ func main() {
 		out.SetVar("abc", "0")
 		out.SetVar("s1", "XXCOUNT"+strconv.Itoa(int(out.Count)))
 		out.SetVar("xxxxx", ftoa(i*i))
+		if i < 5 {
+			out.SetVar("s2", "A")
+		} else {
+			out.SetVar("s2", "TEST")
+		}
+		if i < 3 {
+			out.SetVar("s3", "A")
+		} else if i < 6 {
+			out.SetVar("s3", "ABCDEFGHIJKL")
+		} else {
+			out.SetVar("s3", "TEST")
+		}
+		if i < 3 {
+			out.SetVar("s4", "A")
+		} else if i < 6 {
+			out.SetVar("s4", "ABCDEFGHIJKL")
+		} else {
+			out.SetVar("s4", "TEST")
+		}
 		out.WriteCase()
 	}
 	out.Finish()
 }
 
 // Remove illegal variables from var names and show message about it in log
-// Implement labels for long strings
 // Read xsav files and generate sav files
