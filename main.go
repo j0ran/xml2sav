@@ -497,11 +497,11 @@ func hasAttr(element *xml.StartElement, name string) bool {
 }
 
 func parseXSav(in io.Reader, basename string) error {
-	basename = strings.TrimSuffix(basename, filepath.Ext(basename))
+	bareBasename := strings.TrimSuffix(basename, filepath.Ext(basename))
 	var filename string
 	var f *os.File
 	var out *SpssWriter
-	dictDone := false
+	var dictDone bool
 
 	decoder := xml.NewDecoder(in)
 	for {
@@ -516,7 +516,7 @@ func parseXSav(in io.Reader, basename string) error {
 		case xml.StartElement:
 			switch t.Name.Local {
 			case "sav":
-				filename = fmt.Sprintf("%s_%s.sav", basename, getAttr(&t, "name"))
+				filename = fmt.Sprintf("%s_%s.sav", bareBasename, getAttr(&t, "name"))
 				f, err = os.Create(filename)
 				if err != nil {
 					log.Fatalln(err)
@@ -604,7 +604,7 @@ func parseXSav(in io.Reader, basename string) error {
 			switch t.Name.Local {
 			case "dict":
 				dictDone = true
-				out.Start("Export from example.xsav")
+				out.Start(fmt.Sprintf("Export with xml2sav: %s", basename))
 			case "case":
 				out.WriteCase()
 			case "sav":
