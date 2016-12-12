@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -101,6 +102,22 @@ func atof(s string) float64 {
 		log.Fatalln(err)
 	}
 	return v
+}
+
+var cleanVarNameRegExp = regexp.MustCompile(`[^A-Za-z0-9#\$_\.]`)
+
+func cleanVarName(n string) string {
+	n = cleanVarNameRegExp.ReplaceAllLiteralString(n, "")
+	if len(n) == 0 {
+		n = "illegal"
+	}
+	if (n[0] < 'a' || n[0] > 'z') && (n[0] < 'A' || n[0] > 'Z') {
+		n = "@" + n
+	}
+	if len(n) > 64 {
+		n = n[:64]
+	}
+	return n
 }
 
 func (out *SpssWriter) caseSize() int32 {
@@ -312,9 +329,11 @@ func (out *SpssWriter) AddVar(v *Var) {
 		log.Fatalln("Maximum length for a variable is 255,", v.Name, "is", v.Type)
 	}
 
-	// Trim long name
-	if len(v.Name) > 64 {
-		v.Name = v.Name[:64]
+	// Clean variable name
+	name := cleanVarName(v.Name)
+	if name != v.Name {
+		log.Printf("Change variable name '%s' to '%s'\n", v.Name, name)
+		v.Name = name
 	}
 
 	if _, found := out.DictMap[v.Name]; found {
@@ -493,6 +512,12 @@ func main() {
 		Label:   "Test labels",
 		Labels:  []Label{Label{"A", "Hallo"}, Label{"TEST", "Daar"}, Label{"ABCDEFGHIJKL", "Allemaal"}},
 	})
+	out.AddVar(&Var{
+		Name:    "()()G324",
+		Type:    8,
+		Print:   SPSS_FMT_A,
+		Measure: SPSS_MLVL_NOM,
+	})
 	out.Start("Export from example.xsav")
 	for i := float64(0.0); i < 10; i += 0.1 {
 		out.ClearCase()
@@ -525,5 +550,4 @@ func main() {
 	out.Finish()
 }
 
-// Remove illegal variables from var names and show message about it in log
 // Read xsav files and generate sav files
