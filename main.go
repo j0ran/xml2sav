@@ -16,6 +16,8 @@ import (
 	"time"
 )
 
+const SPSS_NUMERIC = 0
+
 const (
 	SPSS_FMT_A         = 1
 	SPSS_FMT_F         = 5
@@ -28,6 +30,8 @@ const (
 	SPSS_MLVL_ORD = 2
 	SPSS_MLVL_RAT = 3
 )
+
+var defaultStringLength = 255
 
 type Label struct {
 	Value string
@@ -441,7 +445,7 @@ type varXML struct {
 	Type     string      `xml:"type,attr"`
 	Name     string      `xml:"name,attr"`
 	Measure  string      `xml:"measure,attr"`
-	Decimals int         `xml:"decimals,attr"`
+	Decimals byte        `xml:"decimals,attr"`
 	Width    int         `xml:"width,attr"`
 	Label    string      `xml:"label,attr"`
 	Default  string      `xml:"default,attr"`
@@ -506,28 +510,60 @@ func parseXSav(in io.Reader) error {
 				if err = decoder.DecodeElement(varxml, &t); err != nil {
 					return err
 				}
+
 				v := new(Var)
 				v.Name = varxml.Name
+				v.Type = SPSS_NUMERIC
+				v.Measure = SPSS_MLVL_NOM
+				switch varxml.Type {
+				case "numeric":
+					v.Decimals = varxml.Decimals
+					v.Print = SPSS_FMT_F
+					v.Width = 8
+					if hasAttr(&t, "width") {
+						v.Width = byte(varxml.Width)
+					}
+					v.Decimals = 2
+					if hasAttr(&t, "width") {
+						v.Decimals = byte(varxml.Decimals)
+					}
+				case "date":
+					v.Print = SPSS_FMT_DATE
+					v.Width = 11
+					v.Decimals = 0
+					v.Measure = SPSS_MLVL_RAT
+				case "datatime":
+					v.Print = SPSS_FMT_DATE
+					v.Width = 20
+					v.Decimals = 0
+					v.Measure = SPSS_MLVL_RAT
+				default: // string
+					width := defaultStringLength
+					if hasAttr(&t, "width") {
+						width = varxml.Width
+					}
+					v.Type = int32(width)
+					v.Print = SPSS_FMT_A
+					v.Width = byte(width)
+					v.Decimals = 0
+				}
 				v.Default = varxml.Default
 				v.HasDefault = hasAttr(&t, "default")
 				v.Label = varxml.Label
-				switch varxml.Measure {
-				case "scale":
-					v.Measure = SPSS_MLVL_RAT
-				case "nominal":
-					v.Measure = SPSS_MLVL_NOM
-				case "ordinal":
-					v.Measure = SPSS_MLVL_ORD
-				case "":
-					v.Measure = SPSS_MLVL_RAT
-				default:
-					log.Fatalln("Unknown value for measure", varxml.Measure)
+				if hasAttr(&t, "measure") {
+					switch varxml.Measure {
+					case "scale":
+						v.Measure = SPSS_MLVL_RAT
+					case "nominal":
+						v.Measure = SPSS_MLVL_NOM
+					case "ordinal":
+						v.Measure = SPSS_MLVL_ORD
+					default:
+						log.Fatalln("Unknown value for measure", varxml.Measure)
+					}
 				}
-				v.Width = byte(varxml.Width)
-				v.Decimals = byte(varxml.Decimals)
 				for _, l := range varxml.Labels {
 					v.Labels = append(v.Labels, Label{l.Value, l.Desc})
-					fmt.Println(l.Value, l.Desc)
 				}
 				out.AddVar(v)
 			case "case":
@@ -537,7 +573,6 @@ func parseXSav(in io.Reader) error {
 				if err = decoder.DecodeElement(&valxml, &t); err != nil {
 					return err
 				}
-				//out.SetVar(valxml.Name, valxml.Value)
 			}
 		case xml.EndElement:
 			switch t.Name.Local {
