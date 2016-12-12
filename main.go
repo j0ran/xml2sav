@@ -62,10 +62,6 @@ type Var struct {
 
 var endian = binary.LittleEndian
 
-type Flusher interface {
-	Flush() error
-}
-
 type SpssWriter struct {
 	*bufio.Writer
 	seeker   io.WriteSeeker
@@ -521,7 +517,7 @@ func parseXSav(in io.Reader, basename string) error {
 			switch t.Name.Local {
 			case "sav":
 				filename = fmt.Sprintf("%s_%s.sav", basename, getAttr(&t, "name"))
-				f, err = os.Create(filename + ".sav")
+				f, err = os.Create(filename)
 				if err != nil {
 					log.Fatalln(err)
 				}
@@ -530,6 +526,9 @@ func parseXSav(in io.Reader, basename string) error {
 			case "var":
 				if dictDone {
 					log.Fatalln("Adding variables while the dictionary already finished")
+				}
+				if out == nil {
+					log.Fatalln("Adding variables without knowing to which sav file they belong")
 				}
 
 				varxml := new(varXML)
@@ -630,6 +629,8 @@ func init() {
 }
 
 func main() {
+	startTime := time.Now()
+
 	flag.Parse()
 	if len(flag.Args()) != 1 {
 		flag.Usage()
@@ -654,7 +655,5 @@ func main() {
 		log.Fatalln(err)
 	}
 
-	log.Println("Done.")
+	log.Printf("Done in %v\n", time.Now().Sub(startTime))
 }
-
-// Read xsav files and generate sav files
