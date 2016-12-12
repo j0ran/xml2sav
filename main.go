@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"encoding/xml"
 	"fmt"
 	"io"
 	"log"
@@ -431,8 +432,145 @@ func (out *SpssWriter) Finish() {
 	out.updateHeaderNCases()
 }
 
+type labelXML struct {
+	Value string `xml:"value,attr"`
+	Desc  string `xml:"desc"`
+}
+
+type varXML struct {
+	Type     string      `xml:"type,attr"`
+	Name     string      `xml:"name,attr"`
+	Measure  string      `xml:"measure,attr"`
+	Decimals int         `xml:"decimals,attr"`
+	Width    int         `xml:"width,attr"`
+	Label    string      `xml:"label,attr"`
+	Default  string      `xml:"default,attr"`
+	Labels   []*labelXML `xml:"label"`
+}
+
+type valXML struct {
+	Name  string `xml:"name,attr"`
+	Value string `xml:",chardata"`
+}
+
+func getAttr(element *xml.StartElement, name string) string {
+	for _, a := range element.Attr {
+		if a.Name.Local == name {
+			return a.Value
+		}
+	}
+	log.Fatalf("%s element does not have a %s attribute\n", element.Name.Local, name)
+	return ""
+}
+
+func hasAttr(element *xml.StartElement, name string) bool {
+	for _, a := range element.Attr {
+		if a.Name.Local == name {
+			return true
+		}
+	}
+	return false
+}
+
+func parseXSav(in io.Reader) error {
+	var filename string
+	var f *os.File
+	var out *SpssWriter
+	dictDone := false
+
+	decoder := xml.NewDecoder(in)
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return err
+		}
+		switch t := token.(type) {
+		case xml.StartElement:
+			switch t.Name.Local {
+			case "sav":
+				filename = getAttr(&t, "name")
+				f, err = os.Create(filename + ".sav")
+				if err != nil {
+					log.Fatalln(err)
+				}
+				out = NewSpssWriter(f)
+			case "var":
+				if dictDone {
+					log.Fatalln("Adding variables while the dictionary already finished")
+				}
+
+				varxml := new(varXML)
+				if err = decoder.DecodeElement(varxml, &t); err != nil {
+					return err
+				}
+				v := new(Var)
+				v.Name = varxml.Name
+				v.Default = varxml.Default
+				v.HasDefault = hasAttr(&t, "default")
+				v.Label = varxml.Label
+				switch varxml.Measure {
+				case "scale":
+					v.Measure = SPSS_MLVL_RAT
+				case "nominal":
+					v.Measure = SPSS_MLVL_NOM
+				case "ordinal":
+					v.Measure = SPSS_MLVL_ORD
+				case "":
+					v.Measure = SPSS_MLVL_RAT
+				default:
+					log.Fatalln("Unknown value for measure", varxml.Measure)
+				}
+				v.Width = byte(varxml.Width)
+				v.Decimals = byte(varxml.Decimals)
+				for _, l := range varxml.Labels {
+					v.Labels = append(v.Labels, Label{l.Value, l.Desc})
+				}
+				out.AddVar(v)
+			case "case":
+				out.ClearCase()
+			case "val":
+				var valxml valXML
+				if err = decoder.DecodeElement(&valxml, &t); err != nil {
+					return err
+				}
+				out.SetVar(valxml.Name, valxml.Value)
+			}
+		case xml.EndElement:
+			switch t.Name.Local {
+			case "dict":
+				dictDone = true
+				out.Start("Export from example.xsav")
+			case "case":
+				out.WriteCase()
+			case "sav":
+				out.Finish()
+				f.Close()
+				f = nil
+				filename = ""
+				out = nil
+				dictDone = false
+			}
+		}
+	}
+
+	return nil
+}
+
 func main() {
 	fmt.Println("xml2sav")
+
+	in, err := os.Open("test.xsav")
+	if err != nil {
+		log.Fatalln(err)
+	}
+	defer in.Close()
+
+	if err = parseXSav(in); err != nil {
+		log.Fatalln(err)
+	}
 
 	file, err := os.Create("test.sav")
 	if err != nil {
