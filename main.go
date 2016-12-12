@@ -434,7 +434,7 @@ func (out *SpssWriter) Finish() {
 
 type labelXML struct {
 	Value string `xml:"value,attr"`
-	Desc  string `xml:"desc"`
+	Desc  string `xml:",chardata"`
 }
 
 type varXML struct {
@@ -527,6 +527,7 @@ func parseXSav(in io.Reader) error {
 				v.Decimals = byte(varxml.Decimals)
 				for _, l := range varxml.Labels {
 					v.Labels = append(v.Labels, Label{l.Value, l.Desc})
+					fmt.Println(l.Value, l.Desc)
 				}
 				out.AddVar(v)
 			case "case":
@@ -536,7 +537,7 @@ func parseXSav(in io.Reader) error {
 				if err = decoder.DecodeElement(&valxml, &t); err != nil {
 					return err
 				}
-				out.SetVar(valxml.Name, valxml.Value)
+				//out.SetVar(valxml.Name, valxml.Value)
 			}
 		case xml.EndElement:
 			switch t.Name.Local {
