@@ -399,7 +399,7 @@ func (out *SpssWriter) WriteCase() {
 			if v.Type > 0 { // string
 				if len(val) > int(v.Type) {
 					val = val[:v.Type]
-					log.Println("Truncated string:", val)
+					log.Printf("Truncated string for %s: %s\n", v.Name, val)
 				}
 				ll := (((int(v.Type) - 1) / 8) + 1) * 8
 				out.Write(stob(val, ll))
@@ -416,11 +416,17 @@ func (out *SpssWriter) WriteCase() {
 				}
 				binary.Write(out, endian, float64(t.Unix()+TimeOffset))
 			} else { // number
-				f, err := strconv.ParseFloat(val, 64)
-				if err != nil {
-					log.Fatalln(err)
+				if val == "" {
+					binary.Write(out, endian, -math.MaxFloat64) // Write missing
+				} else {
+					f, err := strconv.ParseFloat(val, 64)
+					if err != nil {
+						log.Printf("Problem pasing value for %s: %s - set as missing\n", v.Name, err)
+						binary.Write(out, endian, -math.MaxFloat64) // Write missing
+					} else {
+						binary.Write(out, endian, f)
+					}
 				}
-				binary.Write(out, endian, f)
 			}
 		} else { // Write missing value
 			if v.Type > 0 {

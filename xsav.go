@@ -10,8 +10,6 @@ import (
 	"strings"
 )
 
-const TimeOffset = 12219379200
-
 type labelXML struct {
 	Value string `xml:"value,attr"`
 	Desc  string `xml:",chardata"`
