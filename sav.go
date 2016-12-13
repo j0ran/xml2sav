@@ -190,7 +190,7 @@ func (out *SpssWriter) variableRecords() {
 		}
 
 		if v.Type > 8 { // handle long string
-			count := int((v.Type - 1) >> 3) // number of extra vars to store string
+			count := int((v.Type - 1) / 8) // number of extra vars to store string
 			for i := 0; i < count; i++ {
 				binary.Write(out, endian, int32(2))  // rec_type
 				binary.Write(out, endian, int32(-1)) // extended string part

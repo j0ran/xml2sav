@@ -16,6 +16,7 @@ var register func()
 func init() {
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "Usage: xml2sav [options] <file.xsav>")
+		fmt.Fprintln(os.Stderr, "Options:")
 		flag.PrintDefaults()
 	}
 	flag.BoolVar(&pause, "pause", pause, "pause and wait for enter after finsishing")
@@ -59,3 +60,6 @@ func main() {
 		fmt.Scanln(&line)
 	}
 }
+
+// Support very long string
+// Two pass, determine string lengths

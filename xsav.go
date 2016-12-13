@@ -124,6 +124,9 @@ func parseXSav(in io.Reader, basename string) error {
 					v.Type = int32(width)
 					v.Print = SPSS_FMT_A
 					v.Width = byte(width)
+					if width > 40 {
+						v.Width = 40
+					}
 					v.Decimals = 0
 				}
 				v.Default = varxml.Default
