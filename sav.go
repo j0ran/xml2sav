@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"math/rand"
 	"regexp"
 	"strconv"
 	"strings"
@@ -160,45 +161,66 @@ func (out *SpssWriter) updateHeaderNCases() {
 
 func (out *SpssWriter) variableRecords() {
 	for _, v := range out.Dict {
-		binary.Write(out, endian, int32(2)) // rec_type
-		binary.Write(out, endian, v.Type)   // type (0 or strlen)
-		if len(v.Label) > 0 {
-			binary.Write(out, endian, int32(1)) // has_var_label
-		} else {
-			binary.Write(out, endian, int32(0)) // has_var_label
-		}
-		binary.Write(out, endian, int32(0)) // n_missing_values
-		var format int32
-		if v.Type > 0 { // string
-			format = int32(v.Print)<<16 | int32(v.Type)<<8
-		} else { // number
-			format = int32(v.Print)<<16 | int32(v.Width)<<8 | int32(v.Decimals)
-		}
-		binary.Write(out, endian, format) // print
-		binary.Write(out, endian, format) // write
-		out.Write(stob(v.ShortName, 8))   // name
-		if len(v.Label) > 0 {
-			binary.Write(out, endian, int32(len(v.Label))) // label_len
-			out.Write([]byte(v.Label))                     // label
-			pad := (4 - len(v.Label)) % 4
-			if pad < 0 {
-				pad += 4
-			}
-			for i := 0; i < pad; i++ {
-				out.Write([]byte{0}) // pad out until multiple of 32 bit
-			}
+		segments := 1
+		if v.Type > 255 {
+			segments = (int(v.Type) + 251) / 252
 		}
 
-		if v.Type > 8 { // handle long string
-			count := int((v.Type - 1) / 8) // number of extra vars to store string
-			for i := 0; i < count; i++ {
-				binary.Write(out, endian, int32(2))  // rec_type
-				binary.Write(out, endian, int32(-1)) // extended string part
-				binary.Write(out, endian, int32(0))  // has_var_label
-				binary.Write(out, endian, int32(0))  // n_missing_valuess
-				binary.Write(out, endian, int32(0))  // print
-				binary.Write(out, endian, int32(0))  // write
-				out.Write(stob("        ", 8))       // name
+		for segment := 0; segment < segments; segment++ {
+			width := v.Type
+			if v.Type > 255 {
+				if segment < segments-1 {
+					width = 255
+				} else {
+					width = v.Type - (int32(segments)-1)*252
+				}
+			}
+
+			binary.Write(out, endian, int32(2)) // rec_type
+			binary.Write(out, endian, width)    // type (0 or strlen)
+			if len(v.Label) > 0 {
+				binary.Write(out, endian, int32(1)) // has_var_label
+			} else {
+				binary.Write(out, endian, int32(0)) // has_var_label
+			}
+			binary.Write(out, endian, int32(0)) // n_missing_values
+			var format int32
+			if v.Type > 0 { // string
+				format = int32(v.Print)<<16 | int32(v.Type)<<8
+			} else { // number
+				format = int32(v.Print)<<16 | int32(v.Width)<<8 | int32(v.Decimals)
+			}
+			binary.Write(out, endian, format) // print
+			binary.Write(out, endian, format) // write
+			if segments == 0 {
+				v.ShortName = out.makeShortName(v)
+				out.Write(stob(v.ShortName, 8)) // name
+			} else {
+				out.Write(stob(out.makeShortName(v), 8)) // name (a fresh new one)
+			}
+			if len(v.Label) > 0 {
+				binary.Write(out, endian, int32(len(v.Label))) // label_len
+				out.Write([]byte(v.Label))                     // label
+				pad := (4 - len(v.Label)) % 4
+				if pad < 0 {
+					pad += 4
+				}
+				for i := 0; i < pad; i++ {
+					out.Write([]byte{0}) // pad out until multiple of 32 bit
+				}
+			}
+
+			if width > 8 { // handle long string
+				count := int((width - 1) / 8) // number of extra vars to store string
+				for i := 0; i < count; i++ {
+					binary.Write(out, endian, int32(2))  // rec_type
+					binary.Write(out, endian, int32(-1)) // extended string part
+					binary.Write(out, endian, int32(0))  // has_var_label
+					binary.Write(out, endian, int32(0))  // n_missing_valuess
+					binary.Write(out, endian, int32(0))  // print
+					binary.Write(out, endian, int32(0))  // write
+					out.Write(stob("        ", 8))       // name
+				}
 			}
 		}
 	}
@@ -276,6 +298,10 @@ func (out *SpssWriter) longVarNameRecords() {
 	out.Write(buf.Bytes())
 }
 
+func (out *SpssWriter) veryLongStringRecord() {
+
+}
+
 func (out *SpssWriter) encodingRecord() {
 	binary.Write(out, endian, int32(7))  // rec_type
 	binary.Write(out, endian, int32(20)) // subtype
@@ -326,9 +352,47 @@ func (out *SpssWriter) terminationRecord() {
 	binary.Write(out, endian, int32(0))   // filler
 }
 
+var shortNameRegExp = regexp.MustCompile(`^([^\d]*)(\d*)$`)
+
+func (out *SpssWriter) makeShortName(v *Var) string {
+	short := strings.ToUpper(v.Name)
+	if len(short) > 8 {
+		short = short[:8]
+	}
+	for {
+		_, found := out.ShortMap[short]
+		if !found {
+			break
+		}
+		parts := shortNameRegExp.FindStringSubmatch(short)
+		if parts[2] == "" {
+			l := len(short)
+			if l > 7 {
+				l = 7
+			}
+			short = short[:l] + "2"
+		} else {
+			count, _ := strconv.Atoi(parts[2])
+			count++
+			num := strconv.Itoa(count)
+			l := len(parts[1])
+			if l > 8-len(num) {
+				l = 8 - len(num)
+			}
+			if l == 0 { // Come up with random name
+				short = "@" + strconv.Itoa(rand.Int()%10000000)
+			} else {
+				short = parts[1][:l] + num
+			}
+		}
+	}
+	out.ShortMap[short] = v
+	return short
+}
+
 func (out *SpssWriter) AddVar(v *Var) {
-	if v.Type > 255 {
-		log.Fatalln("Maximum length for a variable is 255,", v.Name, "is", v.Type)
+	if v.Type > int32(maxStringLength) {
+		log.Fatalln("Maximum length for a variable is %d,", maxStringLength, v.Name, "is", v.Type)
 	}
 
 	// Clean variable name
@@ -343,31 +407,15 @@ func (out *SpssWriter) AddVar(v *Var) {
 	}
 
 	v.Index = out.Index
-	out.Index += ((v.Type - 1) / 8) + 1
-
-	// Create unique short variable name
-	short := strings.ToUpper(v.Name)
-	count := 1
-	if len(short) > 8 {
-		short = short[:8]
+	if v.Type > 255 { // Very long string
+		segments := (v.Type + 251) / 252
+		out.Index += 32*(segments-1) + (((v.Type - (segments-1)*252) - 1) / 8) + 1
+	} else { // normal and long string
+		out.Index += ((v.Type - 1) / 8) + 1
 	}
-	for {
-		_, found := out.ShortMap[short]
-		if !found {
-			break
-		}
-		count++
-		s := strconv.Itoa(count)
-		if len(short)+len(s) > 8 {
-			short = short[:8-len(s)]
-		}
-		short = short + s
-	}
-	v.ShortName = short
 
 	out.Dict = append(out.Dict, v)
 	out.DictMap[v.Name] = v
-	out.ShortMap[v.ShortName] = v
 }
 
 func (out *SpssWriter) ClearCase() {
@@ -457,6 +505,7 @@ func (out *SpssWriter) Start(fileLabel string) {
 	out.valueLabelRecords()
 	out.variableDisplayParameterRecord()
 	out.longVarNameRecords()
+	out.veryLongStringRecord()
 	out.encodingRecord()
 	out.longStringValueLabelsRecord()
 	out.terminationRecord()

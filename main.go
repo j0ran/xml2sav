@@ -8,6 +8,7 @@ import (
 	"time"
 )
 
+var maxStringLength = 255
 var defaultStringLength = 255
 var maxPrintStringWidth = 40
 var pause = false
