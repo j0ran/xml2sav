@@ -404,17 +404,29 @@ func (out *SpssWriter) WriteCase() {
 				ll := (((int(v.Type) - 1) / 8) + 1) * 8
 				out.Write(stob(val, ll))
 			} else if v.Print == SPSS_FMT_DATE {
-				t, err := time.Parse("2-Jan-2006", v.Value)
-				if err != nil {
-					log.Fatalln(err)
+				if val == "" {
+					binary.Write(out, endian, -math.MaxFloat64) // Write missing
+				} else {
+					t, err := time.Parse("2-Jan-2006", v.Value)
+					if err != nil {
+						log.Printf("Problem pasing value for %s: %s - set as missing\n", v.Name, err)
+						binary.Write(out, endian, -math.MaxFloat64) // Write missing
+					} else {
+						binary.Write(out, endian, float64(t.Unix()+TimeOffset))
+					}
 				}
-				binary.Write(out, endian, float64(t.Unix()+TimeOffset))
 			} else if v.Print == SPSS_FMT_DATE_TIME {
-				t, err := time.Parse("2-Jan-2006 15:04:05", v.Value)
-				if err != nil {
-					log.Fatalln(err)
+				if val == "" {
+					binary.Write(out, endian, -math.MaxFloat64) // Write missing
+				} else {
+					t, err := time.Parse("2-Jan-2006 15:04:05", v.Value)
+					if err != nil {
+						log.Printf("Problem pasing value for %s: %s - set as missing\n", v.Name, err)
+						binary.Write(out, endian, -math.MaxFloat64) // Write missing
+					} else {
+						binary.Write(out, endian, float64(t.Unix()+TimeOffset))
+					}
 				}
-				binary.Write(out, endian, float64(t.Unix()+TimeOffset))
 			} else { // number
 				if val == "" {
 					binary.Write(out, endian, -math.MaxFloat64) // Write missing
