@@ -11,6 +11,7 @@ import (
 var defaultStringLength = 255
 var maxPrintStringWidth = 40
 var pause = false
+var register func()
 
 func init() {
 	flag.Usage = func() {
@@ -25,6 +26,9 @@ func main() {
 
 	flag.Parse()
 	if len(flag.Args()) != 1 {
+		if register != nil { // register file association
+			register()
+		}
 		flag.Usage()
 		os.Exit(1)
 	}
