@@ -51,6 +51,7 @@ type Var struct {
 	Labels     []Label
 	Value      string
 	HasValue   bool
+	Segments   int // how many segments
 }
 
 var endian = binary.LittleEndian
@@ -161,18 +162,18 @@ func (out *SpssWriter) updateHeaderNCases() {
 
 func (out *SpssWriter) variableRecords() {
 	for _, v := range out.Dict {
-		segments := 1
+		v.Segments = 1
 		if v.Type > 255 {
-			segments = (int(v.Type) + 251) / 252
+			v.Segments = (int(v.Type) + 251) / 252
 		}
 
-		for segment := 0; segment < segments; segment++ {
+		for segment := 0; segment < v.Segments; segment++ {
 			width := v.Type
 			if v.Type > 255 {
-				if segment < segments-1 {
+				if segment < v.Segments-1 {
 					width = 255
 				} else {
-					width = v.Type - (int32(segments)-1)*252
+					width = v.Type - int32(v.Segments-1)*252
 				}
 			}
 
@@ -192,7 +193,7 @@ func (out *SpssWriter) variableRecords() {
 			}
 			binary.Write(out, endian, format) // print
 			binary.Write(out, endian, format) // write
-			if segments == 0 {
+			if segment == 0 {
 				v.ShortName = out.makeShortName(v)
 				out.Write(stob(v.ShortName, 8)) // name
 			} else {
