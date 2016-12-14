@@ -3,8 +3,10 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
+	"path"
 	"time"
 )
 
@@ -12,6 +14,7 @@ var maxStringLength = 255
 var defaultStringLength = 255
 var maxPrintStringWidth = 40
 var pause = false
+var noLogToFile = false
 var register func()
 
 func init() {
@@ -21,6 +24,7 @@ func init() {
 		flag.PrintDefaults()
 	}
 	flag.BoolVar(&pause, "pause", pause, "pause and wait for enter after finsishing")
+	flag.BoolVar(&noLogToFile, "nolog", noLogToFile, "don't write log to file")
 }
 
 func main() {
@@ -40,6 +44,14 @@ func main() {
 	fmt.Println("This program comes with ABSOLUTELY NO WARRANTY.")
 	fmt.Println("This is free software, and you are welcome to redistribute it")
 	fmt.Println("under certain conditions. See the file COPYING.txt.")
+
+	if !noLogToFile {
+		logfile, err := os.Create(filename[:len(filename)-len(path.Ext(filename))] + ".log")
+		if err != nil {
+			log.Fatalln(err)
+		}
+		log.SetOutput(io.MultiWriter(os.Stderr, logfile))
+	}
 
 	in, err := os.Open(filename)
 	if err != nil {

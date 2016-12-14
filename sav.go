@@ -54,6 +54,17 @@ type Var struct {
 	Segments   int // how many segments
 }
 
+// SegmentWidth returns the width of the given segment
+func (v *Var) SegmentWidth(index int) int32 {
+	if v.Type <= 255 {
+		return v.Type
+	}
+	if index < v.Segments-1 {
+		return 255
+	}
+	return v.Type - int32(v.Segments-1)*252
+}
+
 var endian = binary.LittleEndian
 
 type SpssWriter struct {
@@ -102,6 +113,10 @@ func atof(s string) float64 {
 		log.Fatalln(err)
 	}
 	return v
+}
+
+func elementCount(width int32) int32 {
+	return ((width - 1) / 8) + 1
 }
 
 var cleanVarNameRegExp = regexp.MustCompile(`[^A-Za-z0-9#\$_\.]`)
@@ -162,21 +177,8 @@ func (out *SpssWriter) updateHeaderNCases() {
 
 func (out *SpssWriter) variableRecords() {
 	for _, v := range out.Dict {
-		v.Segments = 1
-		if v.Type > 255 {
-			v.Segments = (int(v.Type) + 251) / 252
-		}
-
 		for segment := 0; segment < v.Segments; segment++ {
-			width := v.Type
-			if v.Type > 255 {
-				if segment < v.Segments-1 {
-					width = 255
-				} else {
-					width = v.Type - int32(v.Segments-1)*252
-				}
-			}
-
+			width := v.SegmentWidth(segment)
 			binary.Write(out, endian, int32(2)) // rec_type
 			binary.Write(out, endian, width)    // type (0 or strlen)
 			if len(v.Label) > 0 {
@@ -212,7 +214,7 @@ func (out *SpssWriter) variableRecords() {
 			}
 
 			if width > 8 { // handle long string
-				count := int((width - 1) / 8) // number of extra vars to store string
+				count := int(elementCount(width) - 1) // number of extra vars to store string
 				for i := 0; i < count; i++ {
 					binary.Write(out, endian, int32(2))  // rec_type
 					binary.Write(out, endian, int32(-1)) // extended string part
@@ -407,12 +409,14 @@ func (out *SpssWriter) AddVar(v *Var) {
 		log.Fatalln("Adding duplicate variable named", v.Name)
 	}
 
+	v.Segments = 1
+	if v.Type > 255 {
+		v.Segments = (int(v.Type) + 251) / 252
+	}
+
 	v.Index = out.Index
-	if v.Type > 255 { // Very long string
-		segments := (v.Type + 251) / 252
-		out.Index += 32*(segments-1) + (((v.Type - (segments-1)*252) - 1) / 8) + 1
-	} else { // normal and long string
-		out.Index += ((v.Type - 1) / 8) + 1
+	for i := 0; i < v.Segments; i++ {
+		out.Index += elementCount(v.SegmentWidth(i))
 	}
 
 	out.Dict = append(out.Dict, v)
