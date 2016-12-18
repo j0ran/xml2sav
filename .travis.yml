@@ -1,0 +1,10 @@
+language: go
+
+go:
+  - 1.7
+
+before_install:
+  - go get -v golang.org/x/sys/windows/registry
+
+script:
+  - go build
