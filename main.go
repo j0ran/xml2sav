@@ -1,5 +1,6 @@
 /*
-Copyright 2016 Joran Jessurun
+xml2sav - converts a custom xml document to a SPSS binary file.
+Copyright (C) 2016 A.J. Jessurun
 
 This file is part of xml2sav.
 
@@ -50,20 +51,21 @@ func init() {
 func main() {
 	startTime := time.Now()
 
+	fmt.Println("xml2sav 2.0  Copyright (C) 2016  A.J. Jessurun")
+	fmt.Println("This program comes with ABSOLUTELY NO WARRANTY.")
+	fmt.Println("This is free software, and you are welcome to redistribute it")
+	fmt.Println("under certain conditions. See the file COPYING.txt.")
+
 	flag.Parse()
 	if len(flag.Args()) != 1 {
 		if register != nil { // register file association
 			register()
 		}
+		fmt.Println()
 		flag.Usage()
 		os.Exit(1)
 	}
 	filename := flag.Arg(0)
-
-	fmt.Println("xml2sav 2.0  Copyright (C) 2009-2016  A.J. Jessurun")
-	fmt.Println("This program comes with ABSOLUTELY NO WARRANTY.")
-	fmt.Println("This is free software, and you are welcome to redistribute it")
-	fmt.Println("under certain conditions. See the file COPYING.txt.")
 
 	if !noLogToFile {
 		logfile, err := os.Create(filename[:len(filename)-len(path.Ext(filename))] + ".log")
