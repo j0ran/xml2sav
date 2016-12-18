@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema">
+  <xs:element name="spss">
+    <xs:complexType>
+      <xs:sequence>
+        <xs:element maxOccurs="unbounded" name="sav" type="savType" />
+      </xs:sequence>
+    </xs:complexType>
+  </xs:element>
+  <xs:complexType name="savType">
+    <xs:sequence>
+      <xs:element name="dict" type="dictType" />
+      <xs:element minOccurs="0" maxOccurs="unbounded" name="case" type="caseType" />
+    </xs:sequence>
+    <xs:attribute name="name" use="required">
+      <xs:simpleType>
+        <xs:restriction base="nameType" />
+      </xs:simpleType>
+    </xs:attribute>
+  </xs:complexType>
+  <xs:complexType name="caseType">
+    <xs:sequence>
+      <xs:element minOccurs="0" maxOccurs="unbounded" name="val">
+        <xs:complexType>
+          <xs:simpleContent>
+            <xs:extension base="xs:string">
+              <xs:attribute name="name" use="required">
+                <xs:simpleType>
+                  <xs:restriction base="nameType" />
+                </xs:simpleType>
+              </xs:attribute>
+            </xs:extension>
+          </xs:simpleContent>
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:complexType name="dictType">
+    <xs:sequence>
+      <xs:element name="var">
+        <xs:complexType>
+          <xs:sequence>
+            <xs:element minOccurs="0" maxOccurs="unbounded" name="label">
+              <xs:complexType>
+                <xs:simpleContent>
+                  <xs:extension base="xs:string">
+                    <xs:attribute name="value" use="required">
+                      <xs:simpleType>
+                        <xs:restriction base="xs:string" />
+                      </xs:simpleType>
+                    </xs:attribute>
+                  </xs:extension>
+                </xs:simpleContent>
+              </xs:complexType>
+            </xs:element>
+          </xs:sequence>
+          <xs:attribute name="name" use="required">
+            <xs:simpleType>
+              <xs:restriction base="nameType" />
+            </xs:simpleType>
+          </xs:attribute>
+          <xs:attribute name="type" use="required">
+            <xs:simpleType>
+              <xs:restriction base="xs:string">
+                <xs:enumeration value="numeric" />
+                <xs:enumeration value="string" />
+                <xs:enumeration value="date" />
+                <xs:enumeration value="datetime" />
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+          <xs:attribute name="measure" use="optional">
+            <xs:simpleType>
+              <xs:restriction base="xs:string">
+                <xs:enumeration value="nominal" />
+                <xs:enumeration value="ordinal" />
+                <xs:enumeration value="scale" />
+              </xs:restriction>
+            </xs:simpleType>
+          </xs:attribute>
+          <xs:attribute name="decimals" type="xs:positiveInteger" />
+          <xs:attribute name="width" type="xs:positiveInteger" />
+          <xs:attribute name="label" type="xs:string" />
+          <xs:attribute name="default" type="xs:string" />
+        </xs:complexType>
+      </xs:element>
+    </xs:sequence>
+  </xs:complexType>
+  <xs:simpleType name="nameType">
+    <xs:restriction base="xs:string">
+      <xs:pattern value="[a-zA-Z][a-zA-Z0-9\*\._]*" />
+    </xs:restriction>
+  </xs:simpleType>
+</xs:schema>
