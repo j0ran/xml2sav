@@ -96,6 +96,15 @@ func stob(s string, l int) []byte {
 	return []byte(s)
 }
 
+func stobp(s string, l int, pad byte) []byte {
+	if len(s) > l {
+		s = s[:l]
+	} else if len(s) < l {
+		s += strings.Repeat(string([]byte{pad}), l-len(s))
+	}
+	return []byte(s)
+}
+
 func trim(s string, l int) string {
 	if len(s) > l {
 		return s[:l]
@@ -119,8 +128,6 @@ func elementCount(width int32) int32 {
 	return ((width - 1) / 8) + 1
 }
 
-funct writePadding()
-
 var cleanVarNameRegExp = regexp.MustCompile(`[^A-Za-z0-9#\$_\.]`)
 
 func cleanVarName(n string) string {
@@ -141,7 +148,7 @@ func (out *SpssWriter) caseSize() int32 {
 	size := int32(0)
 	for _, v := range out.Dict {
 		for s := 0; s < v.Segments; s++ {
-			size += elementCount(v.SegmentWidth(index))
+			size += elementCount(v.SegmentWidth(s))
 		}
 	}
 	return size
@@ -153,6 +160,29 @@ func (out *SpssWriter) Seek(offset int64, whence int) (int64, error) {
 
 func (out *SpssWriter) VarCount() int32 {
 	return int32(len(out.Dict))
+}
+
+func (out *SpssWriter) writeString(v *Var, val string) error {
+	for s := 0; s < v.Segments; s++ {
+		var p string
+		if len(val) > 255 {
+			p = val[:255]
+			val = val[255:]
+		} else {
+			p = val
+			val = ""
+		}
+
+		if len(p) > 0 {
+			out.Write([]byte(p))
+		}
+		l := elementCount(v.SegmentWidth(s))*8 - int32(len(p))
+		for i := 0; int32(i) < l; i++ {
+			out.Write([]byte(" "))
+		}
+	}
+
+	return nil
 }
 
 func (out *SpssWriter) headerRecord(fileLabel string) {
@@ -272,17 +302,21 @@ func (out *SpssWriter) variableDisplayParameterRecord() {
 	binary.Write(out, endian, int32(4))         // size
 	binary.Write(out, endian, out.VarCount()*3) // count
 	for _, v := range out.Dict {
-		binary.Write(out, endian, v.Measure) // measure
-		if v.Type > 0 {
-			if v.Type <= int32(maxPrintStringWidth) {
-				binary.Write(out, endian, v.Type) // width
+		for s := 0; s < v.Segments; s++ {
+			binary.Write(out, endian, v.Measure) // measure
+			if v.Type > 0 {
+				if s != 0 {
+					binary.Write(out, endian, int32(8)) // width
+				} else if v.Type <= int32(maxPrintStringWidth) {
+					binary.Write(out, endian, v.Type) // width
+				} else {
+					binary.Write(out, endian, int32(maxPrintStringWidth)) // width
+				}
+				binary.Write(out, endian, int32(0)) // alignment (left)
 			} else {
-				binary.Write(out, endian, int32(maxPrintStringWidth)) // width
+				binary.Write(out, endian, int32(8)) // width
+				binary.Write(out, endian, int32(1)) // alignment (right)
 			}
-			binary.Write(out, endian, int32(0)) // alignment (left)
-		} else {
-			binary.Write(out, endian, int32(8)) // width
-			binary.Write(out, endian, int32(1)) // alignment (right)
 		}
 	}
 }
@@ -306,7 +340,21 @@ func (out *SpssWriter) longVarNameRecords() {
 }
 
 func (out *SpssWriter) veryLongStringRecord() {
+	binary.Write(out, endian, int32(7))  // rec_type
+	binary.Write(out, endian, int32(14)) // subtype
+	binary.Write(out, endian, int32(1))  // size
 
+	buf := bytes.Buffer{}
+	for _, v := range out.Dict {
+		if v.Segments > 1 {
+			buf.Write(stob(v.ShortName, 8))
+			buf.Write([]byte("="))
+			buf.Write(stobp(strconv.Itoa(int(v.Type)), 5, 0))
+			buf.Write([]byte{0, 9})
+		}
+	}
+	binary.Write(out, endian, int32(buf.Len())) // filler
+	out.Write(buf.Bytes())
 }
 
 func (out *SpssWriter) encodingRecord() {
@@ -458,8 +506,7 @@ func (out *SpssWriter) WriteCase() {
 					val = val[:v.Type]
 					log.Printf("Truncated string for %s: %s\n", v.Name, val)
 				}
-				ll := (((int(v.Type) - 1) / 8) + 1) * 8
-				out.Write(stob(val, ll))
+				out.writeString(v, val)
 			} else if v.Print == SPSS_FMT_DATE {
 				if val == "" {
 					binary.Write(out, endian, -math.MaxFloat64) // Write missing
