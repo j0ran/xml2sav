@@ -8,3 +8,8 @@ before_install:
 
 script:
   - go build
+
+os:
+  - linux
+  - windows
+  - mac
