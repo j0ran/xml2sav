@@ -11,9 +11,9 @@ import (
 )
 
 func getExePath() (string, error) {
-	var sysproc = syscall.MustLoadDLL("kernel32.dll").MustFindProc("GetModuleFileNameW")
+	var GetModuleFileNameW = syscall.MustLoadDLL("kernel32.dll").MustFindProc("GetModuleFileNameW")
 	b := make([]uint16, syscall.MAX_PATH)
-	r, _, err := sysproc.Call(0, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)))
+	r, _, err := GetModuleFileNameW.Call(0, uintptr(unsafe.Pointer(&b[0])), uintptr(len(b)))
 	n := uint32(r)
 	if n == 0 {
 		return "", err

@@ -119,6 +119,8 @@ func elementCount(width int32) int32 {
 	return ((width - 1) / 8) + 1
 }
 
+funct writePadding()
+
 var cleanVarNameRegExp = regexp.MustCompile(`[^A-Za-z0-9#\$_\.]`)
 
 func cleanVarName(n string) string {
@@ -138,7 +140,9 @@ func cleanVarName(n string) string {
 func (out *SpssWriter) caseSize() int32 {
 	size := int32(0)
 	for _, v := range out.Dict {
-		size += ((v.Type - 1) / 8) + 1
+		for s := 0; s < v.Segments; s++ {
+			size += elementCount(v.SegmentWidth(index))
+		}
 	}
 	return size
 }
@@ -181,7 +185,7 @@ func (out *SpssWriter) variableRecords() {
 			width := v.SegmentWidth(segment)
 			binary.Write(out, endian, int32(2)) // rec_type
 			binary.Write(out, endian, width)    // type (0 or strlen)
-			if len(v.Label) > 0 {
+			if segment == 0 && len(v.Label) > 0 {
 				binary.Write(out, endian, int32(1)) // has_var_label
 			} else {
 				binary.Write(out, endian, int32(0)) // has_var_label
@@ -195,22 +199,22 @@ func (out *SpssWriter) variableRecords() {
 			}
 			binary.Write(out, endian, format) // print
 			binary.Write(out, endian, format) // write
-			if segment == 0 {
+			if segment == 0 {                 // first var
 				v.ShortName = out.makeShortName(v)
 				out.Write(stob(v.ShortName, 8)) // name
-			} else {
+				if len(v.Label) > 0 {
+					binary.Write(out, endian, int32(len(v.Label))) // label_len
+					out.Write([]byte(v.Label))                     // label
+					pad := (4 - len(v.Label)) % 4
+					if pad < 0 {
+						pad += 4
+					}
+					for i := 0; i < pad; i++ {
+						out.Write([]byte{0}) // pad out until multiple of 32 bit
+					}
+				}
+			} else { // segment > 0
 				out.Write(stob(out.makeShortName(v), 8)) // name (a fresh new one)
-			}
-			if len(v.Label) > 0 {
-				binary.Write(out, endian, int32(len(v.Label))) // label_len
-				out.Write([]byte(v.Label))                     // label
-				pad := (4 - len(v.Label)) % 4
-				if pad < 0 {
-					pad += 4
-				}
-				for i := 0; i < pad; i++ {
-					out.Write([]byte{0}) // pad out until multiple of 32 bit
-				}
 			}
 
 			if width > 8 { // handle long string
