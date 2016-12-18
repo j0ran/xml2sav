@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"io"
 	"log"
 	"math"
@@ -159,7 +160,11 @@ func (out *SpssWriter) Seek(offset int64, whence int) (int64, error) {
 }
 
 func (out *SpssWriter) VarCount() int32 {
-	return int32(len(out.Dict))
+	var count int32
+	for _, v := range out.Dict {
+		count += int32(v.Segments)
+	}
+	return count
 }
 
 func (out *SpssWriter) writeString(v *Var, val string) error {
@@ -223,7 +228,7 @@ func (out *SpssWriter) variableRecords() {
 			binary.Write(out, endian, int32(0)) // n_missing_values
 			var format int32
 			if v.Type > 0 { // string
-				format = int32(v.Print)<<16 | int32(v.Type)<<8
+				format = int32(v.Print)<<16 | int32(width)<<8
 			} else { // number
 				format = int32(v.Print)<<16 | int32(v.Width)<<8 | int32(v.Decimals)
 			}
@@ -492,6 +497,7 @@ func (out *SpssWriter) SetVar(name, value string) {
 }
 
 func (out *SpssWriter) WriteCase() {
+	fmt.Println("WriteCase")
 	for _, v := range out.Dict {
 		if v.HasValue || v.HasDefault {
 			var val string
