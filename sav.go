@@ -352,7 +352,7 @@ func (out *SpssWriter) veryLongStringRecord() {
 	buf := bytes.Buffer{}
 	for _, v := range out.Dict {
 		if v.Segments > 1 {
-			buf.Write(stob(v.ShortName, 8))
+			buf.Write([]byte(v.ShortName))
 			buf.Write([]byte("="))
 			buf.Write(stobp(strconv.Itoa(int(v.Type)), 5, 0))
 			buf.Write([]byte{0, 9})
