@@ -15,6 +15,7 @@ var defaultStringLength = 2048
 var maxPrintStringWidth = 40
 var pause = false
 var noLogToFile = false
+var singlePass = false
 var register func()
 
 func init() {
@@ -25,6 +26,7 @@ func init() {
 	}
 	flag.BoolVar(&pause, "pause", pause, "pause and wait for enter after finsishing")
 	flag.BoolVar(&noLogToFile, "nolog", noLogToFile, "don't write log to file")
+	flag.BoolVar(&singlePass, "single", singlePass, "don't determine lengths of string variables")
 }
 
 func main() {
@@ -60,8 +62,17 @@ func main() {
 	defer in.Close()
 
 	log.Println("Reading", filename)
+	var lengths VarLengths
+	if !singlePass {
+		log.Println("Pass 1, determining maximum length of strings")
+		if lengths, err = findVarLengths(in); err != nil {
+			log.Fatalln(err)
+		}
+		in.Seek(0, io.SeekStart) // Rewind for second read
+		log.Println("Pass 2, generating sav files")
+	}
 
-	if err = parseXSav(in, filename); err != nil {
+	if err = parseXSav(in, filename, lengths); err != nil {
 		log.Fatalln(err)
 	}
 

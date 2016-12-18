@@ -50,12 +50,13 @@ func hasAttr(element *xml.StartElement, name string) bool {
 	return false
 }
 
-func parseXSav(in io.Reader, basename string) error {
+func parseXSav(in io.Reader, basename string, lengths VarLengths) error {
 	bareBasename := strings.TrimSuffix(basename, filepath.Ext(basename))
 	var filename string
 	var f *os.File
 	var out *SpssWriter
 	var dictDone bool
+	var savname string
 
 	decoder := xml.NewDecoder(in)
 	for {
@@ -70,7 +71,8 @@ func parseXSav(in io.Reader, basename string) error {
 		case xml.StartElement:
 			switch t.Name.Local {
 			case "sav":
-				filename = fmt.Sprintf("%s_%s.sav", bareBasename, getAttr(&t, "name"))
+				savname = getAttr(&t, "name")
+				filename = fmt.Sprintf("%s_%s.sav", bareBasename, savname)
 				f, err = os.Create(filename)
 				if err != nil {
 					log.Fatalln(err)
@@ -120,6 +122,11 @@ func parseXSav(in io.Reader, basename string) error {
 					width := defaultStringLength
 					if hasAttr(&t, "width") {
 						width = varxml.Width
+					} else if lengths != nil {
+						width, err = lengths.GetVarLength(savname, v.Name)
+						if err != nil {
+							log.Fatalln(err)
+						}
 					}
 					v.Type = int32(width)
 					v.Print = SPSS_FMT_A
@@ -169,6 +176,7 @@ func parseXSav(in io.Reader, basename string) error {
 				f.Close()
 				f = nil
 				filename = ""
+				savname = ""
 				out = nil
 				dictDone = false
 			}
