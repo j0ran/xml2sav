@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-var maxStringLength = 1024 * 20
-var defaultStringLength = 256
+var maxStringLength = 1024 * 50
+var defaultStringLength = 2048
 var maxPrintStringWidth = 40
 var pause = false
 var noLogToFile = false

@@ -68,23 +68,26 @@ func (v *Var) SegmentWidth(index int) int32 {
 var endian = binary.LittleEndian
 
 type SpssWriter struct {
-	*bufio.Writer
-	seeker   io.WriteSeeker
-	Dict     []*Var
-	DictMap  map[string]*Var // Long variable names index
-	ShortMap map[string]*Var // Short variable names index
-	Count    int32           // Number of cases
-	Index    int32
+	*bufio.Writer                 // Buffered writer
+	seeker        io.WriteSeeker  // Original writer
+	bytecode      *BytecodeWriter // Special writer for compressed cases
+	Dict          []*Var          // Variables
+	DictMap       map[string]*Var // Long variable names index
+	ShortMap      map[string]*Var // Short variable names index
+	Count         int32           // Number of cases
+	Index         int32
 }
 
 func NewSpssWriter(w io.WriteSeeker) *SpssWriter {
-	return &SpssWriter{
+	out := &SpssWriter{
 		seeker:   w,
 		Writer:   bufio.NewWriter(w),
 		DictMap:  make(map[string]*Var),
 		ShortMap: make(map[string]*Var),
 		Index:    1,
 	}
+	out.bytecode = NewBytecodeWriter(out.Writer, 100.0)
+	return out
 }
 
 func stob(s string, l int) []byte {
@@ -166,6 +169,7 @@ func (out *SpssWriter) VarCount() int32 {
 	return count
 }
 
+// writeString writes a string value for a case
 func (out *SpssWriter) writeString(v *Var, val string) error {
 	for s := 0; s < v.Segments; s++ {
 		var p string
@@ -177,12 +181,8 @@ func (out *SpssWriter) writeString(v *Var, val string) error {
 			val = ""
 		}
 
-		if len(p) > 0 {
-			out.Write([]byte(p))
-		}
-		l := elementCount(v.SegmentWidth(s))*8 - int32(len(p))
-		for i := 0; int32(i) < l; i++ {
-			out.Write([]byte(" "))
+		if err := out.bytecode.WriteString(p, int(elementCount(v.SegmentWidth(s)))); err != nil {
+			return err
 		}
 	}
 
@@ -195,7 +195,7 @@ func (out *SpssWriter) headerRecord(fileLabel string) {
 	out.Write(stob("@(#) SPSS DATA FILE - xml2sav 2.0", 60)) // prod_name
 	binary.Write(out, endian, int32(2))                      // layout_code
 	binary.Write(out, endian, out.caseSize())                // nominal_case_size
-	binary.Write(out, endian, int32(0))                      // compression
+	binary.Write(out, endian, int32(1))                      // compression
 	binary.Write(out, endian, int32(0))                      // weight_index
 	binary.Write(out, endian, int32(-1))                     // ncases
 	binary.Write(out, endian, float64(100))                  // bias
@@ -208,6 +208,7 @@ func (out *SpssWriter) headerRecord(fileLabel string) {
 // If you use a buffer, supply it as the flusher argument
 // After this close the file
 func (out *SpssWriter) updateHeaderNCases() {
+	out.bytecode.Flush()
 	out.Flush()
 	out.Seek(80, 0)
 	binary.Write(out.seeker, endian, out.Count) // ncases in headerRecord
@@ -357,7 +358,7 @@ func (out *SpssWriter) veryLongStringRecord() {
 			buf.Write([]byte{0, 9})
 		}
 	}
-	binary.Write(out, endian, int32(buf.Len())) // filler
+	binary.Write(out, endian, int32(buf.Len())) // count
 	out.Write(buf.Bytes())
 }
 
@@ -518,33 +519,33 @@ func (out *SpssWriter) WriteCase() {
 					t, err := time.Parse("2-Jan-2006", v.Value)
 					if err != nil {
 						log.Printf("Problem pasing value for %s: %s - set as missing\n", v.Name, err)
-						binary.Write(out, endian, -math.MaxFloat64) // Write missing
+						out.bytecode.WriteMissing()
 					} else {
-						binary.Write(out, endian, float64(t.Unix()+TimeOffset))
+						out.bytecode.WriteNumber(float64(t.Unix() + TimeOffset))
 					}
 				}
 			} else if v.Print == SPSS_FMT_DATE_TIME {
 				if val == "" {
-					binary.Write(out, endian, -math.MaxFloat64) // Write missing
+					out.bytecode.WriteMissing()
 				} else {
 					t, err := time.Parse("2-Jan-2006 15:04:05", v.Value)
 					if err != nil {
 						log.Printf("Problem pasing value for %s: %s - set as missing\n", v.Name, err)
-						binary.Write(out, endian, -math.MaxFloat64) // Write missing
+						out.bytecode.WriteMissing()
 					} else {
-						binary.Write(out, endian, float64(t.Unix()+TimeOffset))
+						out.bytecode.WriteNumber(float64(t.Unix() + TimeOffset))
 					}
 				}
 			} else { // number
 				if val == "" {
-					binary.Write(out, endian, -math.MaxFloat64) // Write missing
+					out.bytecode.WriteMissing()
 				} else {
 					f, err := strconv.ParseFloat(val, 64)
 					if err != nil {
 						log.Printf("Problem pasing value for %s: %s - set as missing\n", v.Name, err)
-						binary.Write(out, endian, -math.MaxFloat64) // Write missing
+						out.bytecode.WriteMissing()
 					} else {
-						binary.Write(out, endian, f)
+						out.bytecode.WriteNumber(f)
 					}
 				}
 			}
@@ -552,7 +553,7 @@ func (out *SpssWriter) WriteCase() {
 			if v.Type > 0 {
 				out.writeString(v, "")
 			} else {
-				binary.Write(out, endian, -math.MaxFloat64)
+				out.bytecode.WriteMissing()
 			}
 		}
 	}
