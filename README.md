@@ -10,7 +10,8 @@ Formats like csv, excel or databases, when imported into SPSS, do not convey all
 information about the variables. And also the number of rows or columns is often
 limited. This program solves those problems. It is originally developed for a
 web based questionnaire system. The questionnaire data is exported to a xml file
-and can then be converted to SPSS sav files using xml2sav.
+and can then be converted to SPSS sav files using xml2sav. Xml2sav is released
+under the GNU General Public License, see COPYING for more information.
 
 Usage
 -----
