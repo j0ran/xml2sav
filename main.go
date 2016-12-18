@@ -84,6 +84,3 @@ func main() {
 		fmt.Scanln(&line)
 	}
 }
-
-// Support very long string
-// Two pass, determine string lengths
