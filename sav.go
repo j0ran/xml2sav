@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/binary"
-	"fmt"
 	"io"
 	"log"
 	"math"
@@ -497,7 +496,6 @@ func (out *SpssWriter) SetVar(name, value string) {
 }
 
 func (out *SpssWriter) WriteCase() {
-	fmt.Println("WriteCase")
 	for _, v := range out.Dict {
 		if v.HasValue || v.HasDefault {
 			var val string
@@ -552,7 +550,7 @@ func (out *SpssWriter) WriteCase() {
 			}
 		} else { // Write missing value
 			if v.Type > 0 {
-				out.Write(stob("", (((int(v.Type)-1)/8)+1)*8))
+				out.writeString(v, "")
 			} else {
 				binary.Write(out, endian, -math.MaxFloat64)
 			}

@@ -11,7 +11,7 @@ import (
 )
 
 var maxStringLength = 1024 * 20
-var defaultStringLength = 1024
+var defaultStringLength = 256
 var maxPrintStringWidth = 40
 var pause = false
 var noLogToFile = false
