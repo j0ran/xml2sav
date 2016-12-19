@@ -70,7 +70,8 @@ func parseXSavToCsv(reader io.Reader, filename string) error {
 		}
 		switch t := token.(type) {
 		case xml.StartElement:
-			if t.Name.Local == "sav" {
+			switch t.Name.Local {
+			case "sav":
 				savname := getAttr(&t, "name")
 				csvfilename := fmt.Sprintf("%s_%s.csv", basename, savname)
 				log.Println("Writing", csvfilename)
@@ -79,7 +80,7 @@ func parseXSavToCsv(reader io.Reader, filename string) error {
 					return err
 				}
 				csv = NewCsvWriter(f)
-			} else if t.Name.Local == "var" {
+			case "var":
 				v := new(CsvVar)
 				v.Name = getAttr(&t, "name")
 				csv.Dict = append(csv.Dict, v)
@@ -87,11 +88,11 @@ func parseXSavToCsv(reader io.Reader, filename string) error {
 					return fmt.Errorf("Variable %s already defined", v.Name)
 				}
 				csv.Vars[v.Name] = v
-			} else if t.Name.Local == "case" {
+			case "case":
 				for _, v := range csv.Dict {
 					v.Value = ""
 				}
-			} else if t.Name.Local == "val" {
+			case "val":
 				var valxml valXML
 				if err = decoder.DecodeElement(&valxml, &t); err != nil {
 					return err
@@ -103,16 +104,17 @@ func parseXSavToCsv(reader io.Reader, filename string) error {
 				v.Value = valxml.Value
 			}
 		case xml.EndElement:
-			if t.Name.Local == "sav" {
+			switch t.Name.Local {
+			case "sav":
 				csv.Flush()
 				f.Close()
-			} else if t.Name.Local == "dict" {
+			case "dict":
 				header := make([]string, len(csv.Dict))
 				for i := range csv.Dict {
 					header[i] = csv.Dict[i].Name
 				}
 				csv.Write(header)
-			} else if t.Name.Local == "case" {
+			case "case":
 				record := make([]string, len(csv.Dict))
 				for i := range csv.Dict {
 					record[i] = csv.Dict[i].Value
