@@ -21,6 +21,7 @@ package main
 
 import (
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -94,16 +95,16 @@ func parseXSav(in io.Reader, basename string, lengths VarLengths) error {
 				filename = fmt.Sprintf("%s_%s.sav", bareBasename, savname)
 				f, err = os.Create(filename)
 				if err != nil {
-					log.Fatalln(err)
+					return err
 				}
 				out = NewSpssWriter(f)
 				log.Println("Writing", filename)
 			case "var":
 				if dictDone {
-					log.Fatalln("Adding variables while the dictionary already finished")
+					return errors.New("Adding variables while the dictionary already finished")
 				}
 				if out == nil {
-					log.Fatalln("Adding variables without knowing to which sav file they belong")
+					return errors.New("Adding variables without knowing to which sav file they belong")
 				}
 
 				varxml := new(varXML)
@@ -144,7 +145,7 @@ func parseXSav(in io.Reader, basename string, lengths VarLengths) error {
 					} else if lengths != nil {
 						width, err = lengths.GetVarLength(savname, v.Name)
 						if err != nil {
-							log.Fatalln(err)
+							return err
 						}
 					}
 					v.Type = int32(width)
@@ -167,7 +168,7 @@ func parseXSav(in io.Reader, basename string, lengths VarLengths) error {
 					case "ordinal":
 						v.Measure = SPSS_MLVL_ORD
 					default:
-						log.Fatalln("Unknown value for measure", varxml.Measure)
+						return fmt.Errorf("Unknown value for measure %s", varxml.Measure)
 					}
 				}
 				for _, l := range varxml.Labels {

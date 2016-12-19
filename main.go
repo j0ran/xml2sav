@@ -35,6 +35,7 @@ var maxPrintStringWidth = 40
 var pause = false
 var noLogToFile = false
 var singlePass = false
+var toCsv = false
 var register func()
 
 func init() {
@@ -46,6 +47,7 @@ func init() {
 	flag.BoolVar(&pause, "pause", pause, "pause and wait for enter after finsishing")
 	flag.BoolVar(&noLogToFile, "nolog", noLogToFile, "don't write log to file")
 	flag.BoolVar(&singlePass, "single", singlePass, "don't determine lengths of string variables")
+	flag.BoolVar(&toCsv, "csv", toCsv, "convert to csv")
 }
 
 func main() {
@@ -83,7 +85,7 @@ func main() {
 
 	log.Println("Reading", filename)
 	var lengths VarLengths
-	if !singlePass {
+	if !singlePass && !toCsv {
 		log.Println("Pass 1, determining maximum length of strings")
 		if lengths, err = findVarLengths(in); err != nil {
 			log.Fatalln(err)
@@ -92,8 +94,14 @@ func main() {
 		log.Println("Pass 2, generating sav files")
 	}
 
-	if err = parseXSav(in, filename, lengths); err != nil {
-		log.Fatalln(err)
+	if toCsv {
+		if err = parseXSavToCsv(in, filename); err != nil {
+			log.Fatalln(err)
+		}
+	} else {
+		if err = parseXSav(in, filename, lengths); err != nil {
+			log.Fatalln(err)
+		}
 	}
 
 	log.Printf("Done in %v\n", time.Now().Sub(startTime))
