@@ -33,6 +33,8 @@ Command Line Options
 
 Usage: xml2sav [options] <file.xsav>
 Options:
+  -csv
+      convert to csv
   -nolog
     	don't write log to file
   -pause

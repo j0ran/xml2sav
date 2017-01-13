@@ -1,6 +1,6 @@
 /*
 xml2sav - converts a custom xml document to a SPSS binary file.
-Copyright (C) 2016 A.J. Jessurun
+Copyright (C) 2016-2017 A.J. Jessurun
 
 This file is part of xml2sav.
 
@@ -73,7 +73,10 @@ func findVarLengths(r io.Reader) (VarLengths, error) {
 				}
 			}
 		case xml.EndElement:
-			v[savName] = lengths
+			if t.Name.Local == "sav" {
+				v[savName] = lengths
+				lengths = nil
+			}
 		}
 	}
 
