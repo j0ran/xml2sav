@@ -444,7 +444,7 @@ func (out *SpssWriter) makeShortName(v *Var) string {
 			break
 		}
 		parts := shortNameRegExp.FindStringSubmatch(short)
-		if parts[2] == "" {
+		if parts == nil || parts[2] == "" {
 			l := len(short)
 			if l > 7 {
 				l = 7
