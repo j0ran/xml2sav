@@ -389,6 +389,19 @@ func (out *SpssWriter) longVarNameRecords() {
 }
 
 func (out *SpssWriter) veryLongStringRecord() {
+	b := false
+	for _, v := range out.Dict {
+		if v.Segments > 1 {
+			b = true
+			break
+		}
+	}
+
+	if !b {
+		// There are no very long strings so don't write the record
+		return
+	}
+
 	binary.Write(out, endian, int32(7))  // rec_type
 	binary.Write(out, endian, int32(14)) // subtype
 	binary.Write(out, endian, int32(1))  // size
