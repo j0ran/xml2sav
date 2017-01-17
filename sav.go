@@ -475,14 +475,15 @@ func (out *SpssWriter) AddVar(v *Var) {
 	}
 
 	// Clean variable name
+	origName := v.Name
 	name := cleanVarName(v.Name)
 	if name != v.Name {
 		log.Printf("Change variable name '%s' to '%s'\n", v.Name, name)
 		v.Name = name
 	}
 
-	if _, found := out.DictMap[v.Name]; found {
-		log.Fatalln("Adding duplicate variable named", v.Name)
+	if _, found := out.DictMap[origName]; found {
+		log.Fatalln("Adding duplicate variable named", origName)
 	}
 
 	v.Segments = 1
@@ -496,7 +497,7 @@ func (out *SpssWriter) AddVar(v *Var) {
 	}
 
 	out.Dict = append(out.Dict, v)
-	out.DictMap[v.Name] = v
+	out.DictMap[origName] = v
 }
 
 func (out *SpssWriter) ClearCase() {
@@ -509,7 +510,7 @@ func (out *SpssWriter) ClearCase() {
 func (out *SpssWriter) SetVar(name, value string) {
 	v, found := out.DictMap[name]
 	if !found {
-		log.Fatalln("Can not find the variable named", name)
+		log.Fatalln("Can not find the variable named in dictionary", name)
 	}
 	v.Value = value
 	v.HasValue = true
