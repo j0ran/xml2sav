@@ -36,6 +36,7 @@ var pause = false
 var noLogToFile = false
 var singlePass = false
 var toCsv = false
+var ignoreMissingVar = false
 var register func()
 
 func init() {
@@ -48,6 +49,7 @@ func init() {
 	flag.BoolVar(&noLogToFile, "nolog", noLogToFile, "don't write log to file")
 	flag.BoolVar(&singlePass, "single", singlePass, "don't determine lengths of string variables")
 	flag.BoolVar(&toCsv, "csv", toCsv, "convert to csv")
+	flag.BoolVar(&ignoreMissingVar, "ignore", ignoreMissingVar, "ignore values in cases that are not declared in dictronary")
 }
 
 func main() {

@@ -320,6 +320,31 @@ func (out *SpssWriter) valueLabelRecords() {
 	}
 }
 
+func (out *SpssWriter) machineIntegerInfoRecord() {
+	binary.Write(out, endian, int32(7))     // rec_type
+	binary.Write(out, endian, int32(3))     // subtype
+	binary.Write(out, endian, int32(4))     // size
+	binary.Write(out, endian, int32(8))     // count
+	binary.Write(out, endian, int32(0))     // version_major
+	binary.Write(out, endian, int32(10))    // version_minor
+	binary.Write(out, endian, int32(1))     // version_revision
+	binary.Write(out, endian, int32(-1))    // machine_code
+	binary.Write(out, endian, int32(1))     // floating_point_rep
+	binary.Write(out, endian, int32(1))     // compression_code
+	binary.Write(out, endian, int32(2))     // endianness
+	binary.Write(out, endian, int32(65001)) // character_code
+}
+
+func (out *SpssWriter) machineFloatingPointInfoRecord() {
+	binary.Write(out, endian, int32(7))                  // rec_type
+	binary.Write(out, endian, int32(4))                  // subtype
+	binary.Write(out, endian, int32(8))                  // size
+	binary.Write(out, endian, int32(3))                  // count
+	binary.Write(out, endian, float64(-math.MaxFloat64)) // sysmis
+	binary.Write(out, endian, float64(math.MaxFloat64))  // highest
+	binary.Write(out, endian, float64(-math.MaxFloat64)) // lowest
+}
+
 func (out *SpssWriter) variableDisplayParameterRecord() {
 	binary.Write(out, endian, int32(7))         // rec_type
 	binary.Write(out, endian, int32(11))        // subtype
@@ -510,6 +535,9 @@ func (out *SpssWriter) ClearCase() {
 func (out *SpssWriter) SetVar(name, value string) {
 	v, found := out.DictMap[name]
 	if !found {
+		if ignoreMissingVar {
+			return
+		}
 		log.Fatalln("Can not find the variable named in dictionary", name)
 	}
 	v.Value = value
@@ -584,6 +612,8 @@ func (out *SpssWriter) Start(fileLabel string) {
 	out.headerRecord(fileLabel)
 	out.variableRecords()
 	out.valueLabelRecords()
+	out.machineIntegerInfoRecord()
+	out.machineFloatingPointInfoRecord()
 	out.variableDisplayParameterRecord()
 	out.longVarNameRecords()
 	out.veryLongStringRecord()
