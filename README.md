@@ -105,5 +105,5 @@ Example
 When a defined variable is not set in a case, it will be marked as missing in
 the resulting SPSS sav file.
 
-Dates are in the format dd-mmm-yyyy, with the mmm being the abreviated name of
+Dates are in the format dd-mmm-yyyy, with the mmm being the abbreviated name of
 the month in English. Datetimes are of the format dd-mmm-yyyy hh:mm:ss.
